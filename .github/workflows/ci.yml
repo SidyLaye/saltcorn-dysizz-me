@@ -1,0 +1,17 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm, cache-dependency-path: tools/package-lock.json }
+      - run: npm ci
+        working-directory: tools
+      - run: node build.mjs
+        working-directory: tools
+      - name: index.js et docs/MODULES.md sont à jour
+        run: git diff --exit-code index.js docs/MODULES.md
+      - run: node tests/run.cjs
+        env: { NODE_PATH: tools/node_modules }
