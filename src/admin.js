@@ -1,5 +1,5 @@
-/* Pages d'administration : /dysizz-vie (catalogue des modules) et
-   /dysizz-vie/m/:key (ce qu'il y a derrière un module). */
+/* Pages d'administration : /dysizz-me (catalogue des modules) et
+   /dysizz-me/m/:key (ce qu'il y a derrière un module). */
 "use strict";
 const { esc, isAdmin, denied, VERSION } = require("./core");
 const { installModule, uninstallModule, moduleStatus, getCfg } = require("./installer");
@@ -34,8 +34,8 @@ const home = async (req, res) => {
 <div class="dzv-mod-counts"><span>${(m.tables || []).length} tables</span><span>${(m.views || []).length} vues</span><span>${(m.pages || []).length} pages</span><span>${(m.triggers || []).length} workflows</span></div>
 ${deps.length ? `<div class="dzv-mod-deps">Utilise : ${esc(deps.join(", "))}</div>` : ""}
 <div class="dzv-mod-actions">
-${form(req, `/dysizz-vie/install/${m.key}`, `<button class="btn btn-sm ${st.installed ? "btn-outline-secondary" : "btn-primary"}">${st.installed ? "Mettre à jour" : "Installer"}</button>`)}
-<a class="btn btn-sm btn-link" href="/dysizz-vie/m/${m.key}">Ce qu'il y a derrière</a>
+${form(req, `/dysizz-me/install/${m.key}`, `<button class="btn btn-sm ${st.installed ? "btn-outline-secondary" : "btn-primary"}">${st.installed ? "Mettre à jour" : "Installer"}</button>`)}
+<a class="btn btn-sm btn-link" href="/dysizz-me/m/${m.key}">Ce qu'il y a derrière</a>
 ${st.installed && (m.pages || [])[0] ? `<a class="btn btn-sm btn-link" href="/page/${esc(m.pages[0].name)}">Ouvrir</a>` : ""}
 </div></div>`);
     }
@@ -43,8 +43,8 @@ ${st.installed && (m.pages || [])[0] ? `<a class="btn btn-sm btn-link" href="/pa
   }
   const miss = require("./installer").missingDeps();
   wrap(res, "Modules", `${flash(req)}
-<div class="dzv-admin-top"><div><h1>Ma vie</h1><p>La solution est découpée en modules. Chacun ajoute des tables, des vues (blocs de dysizz-ui), des pages et des workflows (blocs de dysizz-flow). Tout reste modifiable dans Saltcorn ; « Ce qu'il y a derrière » montre comment chaque module fonctionne. Version ${esc(VERSION)}.</p></div>
-${form(req, "/dysizz-vie/install-all", '<button class="btn btn-primary"><i class="fas fa-magic"></i> Tout installer</button>')}</div>
+<div class="dzv-admin-top"><div><h1>Me</h1><p>La solution est découpée en modules. Chacun ajoute des tables, des vues (blocs de dysizz-ui), des pages et des workflows (blocs de dysizz-flow). Tout reste modifiable dans Saltcorn ; « Ce qu'il y a derrière » montre comment chaque module fonctionne. Version ${esc(VERSION)}.</p></div>
+${form(req, "/dysizz-me/install-all", '<button class="btn btn-primary"><i class="fas fa-magic"></i> Tout installer</button>')}</div>
 ${miss.length ? `<div class="dzv-flash dzv-ko">Cette solution a besoin de : <b>${esc(miss.join(", "))}</b>. Installe-les d'abord (Paramètres → Modules).</div>` : ""}
 ${cards.join("")}`);
 };
@@ -52,7 +52,7 @@ ${cards.join("")}`);
 const detail = async (req, res) => {
   if (!isAdmin(req)) return denied(res);
   const m = MODULES.find((x) => x.key === req.params.key);
-  if (!m) return res.redirect("/dysizz-vie");
+  if (!m) return res.redirect("/dysizz-me");
   const st = await moduleStatus(m);
   const changed = (x) => (x.changed ? ' <span class="dzv-st dzv-st-part" title="Tu l\'as modifié : une mise à jour ne l\'écrase pas">modifié</span>' : "");
   const missing = (x) => (x.exists ? "" : ' <span class="dzv-st">absent</span>');
@@ -86,10 +86,10 @@ ${s.id ? `<a class="dzv-edit" href="/actions/configure/${s.id}">ouvrir dans l'é
   const flow = (m.explain || []).map(([a, b]) => `<div class="dzv-flow"><div class="dzv-flow-q">${esc(a)}</div><i class="fas fa-arrow-right"></i><div class="dzv-flow-a">${esc(b)}</div></div>`).join("");
   const dependents = MODULES.filter((x) => (x.depends || []).includes(m.key)).map((x) => x.label);
   wrap(res, `Module ${m.label}`, `${flash(req)}
-<p><a href="/dysizz-vie">← Modules</a></p>
+<p><a href="/dysizz-me">← Modules</a></p>
 <div class="dzv-admin-top"><div><h1><i class="${esc(m.icon)}"></i> ${esc(m.label)} ${badge(st)}</h1><p>${esc(m.description)}</p>
 ${(m.depends || []).length ? `<p class="dzv-muted">S'appuie sur : ${esc(m.depends.join(", "))}.</p>` : ""}${dependents.length ? `<p class="dzv-muted">Utilisé par : ${esc(dependents.join(", "))}.</p>` : ""}</div>
-<div class="dzv-mod-actions">${form(req, `/dysizz-vie/install/${m.key}?back=m`, `<button class="btn btn-primary">${st.installed ? "Mettre à jour" : "Installer"}</button>`)}</div></div>
+<div class="dzv-mod-actions">${form(req, `/dysizz-me/install/${m.key}?back=m`, `<button class="btn btn-primary">${st.installed ? "Mettre à jour" : "Installer"}</button>`)}</div></div>
 ${m.setup ? `<div class="dzv-setup"><h2>À régler</h2>${m.setup}</div>` : ""}
 <h2>Comment ça marche</h2><div class="dzv-flows">${flow}</div>
 <h2>Tables</h2>${tables}
@@ -98,9 +98,9 @@ ${m.setup ? `<div class="dzv-setup"><h2>À régler</h2>${m.setup}</div>` : ""}
 <h2>Workflows <small class="dzv-muted">(faits de blocs dysizz-flow)</small></h2>${triggers || '<p class="dzv-muted">Aucun.</p>'}
 <h2>Entretien</h2>
 <div class="dzv-danger">
-${form(req, `/dysizz-vie/install/${m.key}?reset=1&back=m`, '<button class="btn btn-outline-warning btn-sm">Réinitialiser vues, pages et workflows</button>', { confirm: "Tes modifications des vues, pages et workflows de ce module seront remplacées par la version du module. Tes données ne bougent pas. Continuer ?" })}
-${form(req, `/dysizz-vie/uninstall/${m.key}`, '<button class="btn btn-outline-secondary btn-sm">Retirer (garder les données)</button>', { confirm: "Retirer les pages, vues et déclencheurs de ce module ? Les tables et leurs données restent." })}
-${form(req, `/dysizz-vie/uninstall/${m.key}?drop=1`, `<input name="confirm" placeholder="tape ${esc(m.key)}" class="form-control form-control-sm" style="width:140px;display:inline-block"> <button class="btn btn-outline-danger btn-sm">Tout supprimer, données comprises</button>`)}
+${form(req, `/dysizz-me/install/${m.key}?reset=1&back=m`, '<button class="btn btn-outline-warning btn-sm">Réinitialiser vues, pages et workflows</button>', { confirm: "Tes modifications des vues, pages et workflows de ce module seront remplacées par la version du module. Tes données ne bougent pas. Continuer ?" })}
+${form(req, `/dysizz-me/uninstall/${m.key}`, '<button class="btn btn-outline-secondary btn-sm">Retirer (garder les données)</button>', { confirm: "Retirer les pages, vues et déclencheurs de ce module ? Les tables et leurs données restent." })}
+${form(req, `/dysizz-me/uninstall/${m.key}?drop=1`, `<input name="confirm" placeholder="tape ${esc(m.key)}" class="form-control form-control-sm" style="width:140px;display:inline-block"> <button class="btn btn-outline-danger btn-sm">Tout supprimer, données comprises</button>`)}
 </div>`);
 };
 
@@ -109,13 +109,13 @@ const go = (res, url, key, msg, isErr) => res.redirect(`${url}${url.includes("?"
 const install = async (req, res) => {
   if (!isAdmin(req)) return denied(res);
   const m = MODULES.find((x) => x.key === req.params.key);
-  if (!m) return res.redirect("/dysizz-vie");
-  const back = req.query.back === "m" ? `/dysizz-vie/m/${m.key}` : "/dysizz-vie";
+  if (!m) return res.redirect("/dysizz-me");
+  const back = req.query.back === "m" ? `/dysizz-me/m/${m.key}` : "/dysizz-me";
   try {
     const log = await installModule(m, MODULES, { reset: req.query.reset === "1" });
     go(res, back, m.key, `${m.label} : ${log.length ? log.slice(0, 25).join(" · ") + (log.length > 25 ? ` · (+${log.length - 25})` : "") : "déjà à jour"}`);
   } catch (e) {
-    console.error("[dysizz-vie]", e);
+    console.error("[dysizz-me]", e);
     go(res, back, m.key, `${m.label} : ${e.message}`, true);
   }
 };
@@ -125,24 +125,24 @@ const installAll = async (req, res) => {
   const done = [];
   try {
     for (const m of MODULES) { await installModule(m, MODULES); done.push(m.label); }
-    go(res, "/dysizz-vie", "", `Installés : ${done.join(", ")}. Ta page d'accueil : /page/accueil`);
+    go(res, "/dysizz-me", "", `Installés : ${done.join(", ")}. Ta page d'accueil : /page/accueil`);
   } catch (e) {
-    console.error("[dysizz-vie]", e);
-    go(res, "/dysizz-vie", "", `Arrêt après ${done.join(", ") || "rien"} : ${e.message}`, true);
+    console.error("[dysizz-me]", e);
+    go(res, "/dysizz-me", "", `Arrêt après ${done.join(", ") || "rien"} : ${e.message}`, true);
   }
 };
 
 const uninstall = async (req, res) => {
   if (!isAdmin(req)) return denied(res);
   const m = MODULES.find((x) => x.key === req.params.key);
-  if (!m) return res.redirect("/dysizz-vie");
+  if (!m) return res.redirect("/dysizz-me");
   const drop = req.query.drop === "1";
-  if (drop && (req.body || {}).confirm !== m.key) return go(res, `/dysizz-vie/m/${m.key}`, m.key, `Tape « ${m.key} » pour confirmer la suppression des données`, true);
+  if (drop && (req.body || {}).confirm !== m.key) return go(res, `/dysizz-me/m/${m.key}`, m.key, `Tape « ${m.key} » pour confirmer la suppression des données`, true);
   try {
     const log = await uninstallModule(m, MODULES, { dropTables: drop });
-    go(res, "/dysizz-vie", m.key, `${m.label} retiré : ${log.join(" · ") || "rien à retirer"}`);
+    go(res, "/dysizz-me", m.key, `${m.label} retiré : ${log.join(" · ") || "rien à retirer"}`);
   } catch (e) {
-    go(res, `/dysizz-vie/m/${m.key}`, m.key, e.message, true);
+    go(res, `/dysizz-me/m/${m.key}`, m.key, e.message, true);
   }
 };
 

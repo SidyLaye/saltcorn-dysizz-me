@@ -1,13 +1,13 @@
-# dysizz-vie
+# Me (dysizz-me)
 
-La solution « Ma vie » pour Saltcorn, découpée en modules. Chaque module s'installe en un clic et crée de vraies tables, vues, pages et workflows Saltcorn. Tu peux tout lire et tout modifier dans Saltcorn.
+La solution « Me » pour Saltcorn, découpée en modules. Chaque module s'installe en un clic et crée de vraies tables, vues, pages et workflows Saltcorn. Tu peux tout lire et tout modifier dans Saltcorn.
 
 Elle ne contient **que des définitions**. Elle s'appuie sur deux autres modules, à installer avant elle :
 
 | Module | Rôle |
 |---|---|
-| [dysizz-ui](https://github.com/SidyLaye/saltcorn-dysizz-ui) (3.2 ou plus) | le design, les blocs UI et les vues de données (DZ Indicateurs, DZ Tableau, DZ Répartition, DZ À venir) |
-| [dysizz-flow](https://github.com/SidyLaye/saltcorn-dysizz-flow) | les blocs workflow : tous les automatismes de la solution sont des workflows faits de ces blocs |
+| [dysizz-ui](https://github.com/SidyLaye/saltcorn-dysizz-ui) (3.3 ou plus) | le design, les blocs UI et les vues de données (Indicateurs, Tableau, Répartition, À venir, Graphique, Calendrier, Journal, Statut) |
+| [dysizz-flow](https://github.com/SidyLaye/saltcorn-dysizz-flow) (2.0 ou plus) | les blocs workflow : tous les automatismes de la solution sont des workflows faits de ces blocs |
 
 ## Les modules
 
@@ -25,19 +25,20 @@ Elle ne contient **que des définitions**. Elle s'appuie sur deux autres modules
 | Veille | **Veille tech** | Dev, cyber (CERT-FR), IA, DevOps, MLOps, cloud, réseau, systèmes (RSS) |
 | | **Vidéos** | Chaînes YouTube, lecture directement dans l'appli |
 | | **Actus France & Sénégal** | Les titres du jour des deux pays côte à côte |
+| Système | **Surveillance** | Sites et services vérifiés toutes les 5 min, temps de réponse en graphique, incidents, certificats TLS |
 
-Le détail de chaque module (tables, champs, vues, déclencheurs et leur code) est dans [docs/MODULES.md](docs/MODULES.md). Tu le retrouves aussi dans Saltcorn, sur `/dysizz-vie`, bouton « Ce qu'il y a derrière ».
+Le détail de chaque module (tables, champs, vues, déclencheurs et leur code) est dans [docs/MODULES.md](docs/MODULES.md). Tu le retrouves aussi dans Saltcorn, sur `/dysizz-me`, bouton « Ce qu'il y a derrière ».
 
 ## Installer
 
 1. Installe **dysizz-ui**, puis **dysizz-flow**.
-2. Saltcorn → Paramètres → Modules → Ajouter : dépôt GitHub `SidyLaye/saltcorn-dysizz-vie`.
-3. Ouvre `/dysizz-vie`, puis clique sur « Tout installer » ou installe les modules un par un. Ta page d'accueil devient `/page/accueil`.
+2. Saltcorn → Paramètres → Modules → Ajouter : dépôt GitHub `SidyLaye/saltcorn-dysizz-me`.
+3. Ouvre `/dysizz-me`, puis clique sur « Tout installer » ou installe les modules un par un. Ta page d'accueil devient `/page/accueil`.
 4. Pour les modules qui parlent à l'extérieur (mails, emploi), suis l'encadré « À régler » de leur page « Ce qu'il y a derrière ».
 
 ### Secrets
 
-Les mots de passe ne vont jamais dans la base. Tu les mets dans les variables d'environnement du service Saltcorn (Dokploy → Environment) :
+Les mots de passe ne vont jamais en clair dans la base. Tu les mets dans les variables d'environnement du service Saltcorn (Dokploy → Environment), ou dans le coffre chiffré de dysizz-flow (`/dysizz-flow/coffre`) :
 
 | Variable | Pour |
 |---|---|
@@ -76,3 +77,8 @@ cd .. && NODE_PATH=tools/node_modules node tests/run.cjs
 - `index.js` est **généré** : ne le modifie pas à la main. La CI vérifie qu'il est à jour.
 
 Licence MIT.
+
+
+## Ancien nom
+
+La solution s'appelait « dysizz-vie ». Si elle était déjà installée : retire l'ancien module dans Saltcorn, installe `dysizz-me` ; tes modules installés et tes réglages sont repris tout seuls, tes données ne bougent pas.

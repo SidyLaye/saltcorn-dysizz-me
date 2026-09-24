@@ -1,5 +1,5 @@
 {
-  "name": "dysizz-vie-tools",
+  "name": "dysizz-me-tools",
   "private": true,
   "description": "Outils de build et de test (jamais installés sur le serveur Saltcorn)",
   "type": "module",

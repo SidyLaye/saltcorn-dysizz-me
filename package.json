@@ -1,11 +1,11 @@
 {
-  "name": "dysizz-vie",
-  "version": "1.0.0",
-  "description": "Solution « Ma vie » pour Saltcorn : tâches, objectifs, maison, budget, santé, documents, mails pro, emploi, veille tech, vidéos, actus France & Sénégal. Construite uniquement avec les blocs UI de dysizz-ui et les blocs workflow de dysizz-flow.",
+  "name": "dysizz-me",
+  "version": "2.0.0",
+  "description": "Solution « Me » pour Saltcorn : tâches, objectifs, maison, budget, santé, documents, mails pro, emploi, veille tech, vidéos, actus France & Sénégal. Construite uniquement avec les blocs UI de dysizz-ui et les blocs workflow de dysizz-flow.",
   "main": "index.js",
   "author": "Sidy Laye",
   "license": "MIT",
-  "repository": "github:SidyLaye/saltcorn-dysizz-vie",
+  "repository": "github:SidyLaye/saltcorn-dysizz-me",
   "keywords": [
     "saltcorn",
     "saltcorn-plugin",

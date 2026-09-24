@@ -1,4 +1,4 @@
-/* dysizz-vie 1.0.0 — FICHIER GÉNÉRÉ par tools/build.mjs depuis src/. Ne pas modifier à la main. */
+/* dysizz-me 2.0.0 — FICHIER GÉNÉRÉ par tools/build.mjs depuis src/. Ne pas modifier à la main. */
 "use strict";
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __commonJS = (cb, mod) => function __require() {
@@ -9,8 +9,8 @@ var __commonJS = (cb, mod) => function __require() {
 var require_core = __commonJS({
   "../src/core.js"(exports2, module2) {
     "use strict";
-    var PLUGIN2 = "dysizz-vie";
-    var VERSION = true ? "1.0.0" : "dev";
+    var PLUGIN2 = "dysizz-me";
+    var VERSION = true ? "2.0.0" : "dev";
     var isAdmin = (req) => !!(req && req.user && req.user.role_id === 1);
     var esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
     var denied = (res) => res.status(403).send("R\xE9serv\xE9 aux administrateurs");
@@ -199,10 +199,10 @@ var require_shell = __commonJS({
     "use strict";
     var { esc } = require_core();
     var { box, O, text } = require_layout();
-    var GROUPS = ["Aujourd'hui", "Organisation", "Vie perso", "Travail", "Veille"];
+    var GROUPS = ["Aujourd'hui", "Organisation", "Vie perso", "Travail", "Veille", "Syst\xE8me"];
     var navItems = (mods) => mods.flatMap((m) => (m.nav || []).map((n) => ({ ...n, module: m.key }))).sort((a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group) || (a.order || 50) - (b.order || 50));
     var sideHtml = (items, current) => {
-      let html = `<a class="dz-brand dzv-brand" href="/page/accueil"><span class="dz-brand-mark"></span>Ma vie</a>
+      let html = `<a class="dz-brand dzv-brand" href="/page/accueil"><span class="dz-brand-mark"></span>Me</a>
 <button class="dz-search dzv-search" type="button" data-dz-cmdk-open><i class="fas fa-search"></i><span>Aller \xE0\u2026</span><span class="dz-kbd">Ctrl K</span></button>`;
       let g = null;
       for (const it of items) {
@@ -212,7 +212,7 @@ var require_shell = __commonJS({
         }
         html += `<a class="dz-side-item${it.page === current ? " dz-active" : ""}" href="/page/${esc(it.page)}"><i class="${esc(it.icon)}"></i>${esc(it.label)}</a>`;
       }
-      html += `<div class="dz-side-foot dzv-side-foot"><a href="/dysizz-vie" class="dzv-foot-link"><i class="fas fa-puzzle-piece"></i>Modules</a><button class="dz-btn dz-btn-ghost dz-icon-btn dz-theme-btn" data-dz-theme-toggle aria-label="Th\xE8me"><i class="fas fa-moon dz-moon"></i><i class="fas fa-sun dz-sun"></i></button></div>`;
+      html += `<div class="dz-side-foot dzv-side-foot"><a href="/dysizz-me" class="dzv-foot-link"><i class="fas fa-puzzle-piece"></i>Modules</a><button class="dz-btn dz-btn-ghost dz-icon-btn dz-theme-btn" data-dz-theme-toggle aria-label="Th\xE8me"><i class="fas fa-moon dz-moon"></i><i class="fas fa-sun dz-sun"></i></button></div>`;
       return html;
     };
     var topHtml = (title, icon, quick) => `
@@ -236,7 +236,7 @@ ${items.map((i) => `<a href="/page/${esc(i.page)}" data-keywords="${esc(i.keywor
 <div class="dz-cmdk-group">Cr\xE9er</div>
 ${quick.map((q) => `<a href="javascript:ajax_modal('${esc(q.url)}')" data-keywords="ajouter nouveau nouvelle ${esc(q.keywords || "")}"><i class="${esc(q.icon)}"></i>${esc(q.label)}</a>`).join("\n")}
 <div class="dz-cmdk-group">R\xE9glages</div>
-<a href="/dysizz-vie" data-keywords="modules installer"><i class="fas fa-puzzle-piece"></i>Modules</a>
+<a href="/dysizz-me" data-keywords="modules installer"><i class="fas fa-puzzle-piece"></i>Modules</a>
 <a href="#" data-dz-theme-toggle data-keywords="sombre clair"><i class="fas fa-adjust"></i>Changer de th\xE8me</a>
 <div class="dz-cmdk-empty" hidden>Aucun r\xE9sultat</div>
 </div>
@@ -313,8 +313,19 @@ var require_installer = __commonJS({
       db: require("@saltcorn/data/db"),
       state: require("@saltcorn/data/db/state").getState()
     });
-    var CFG_KEY = "dysizz_vie";
-    var getCfg = async () => await require("@saltcorn/data/models/config").getConfig(CFG_KEY, {}) || {};
+    var CFG_KEY = "dysizz_me";
+    var OLD_KEY = "dysizz_vie";
+    var getCfg = async () => {
+      const C = require("@saltcorn/data/models/config");
+      const cur = await C.getConfig(CFG_KEY, null);
+      if (cur) return cur;
+      const old = await C.getConfig(OLD_KEY, null);
+      if (old) {
+        await C.setConfig(CFG_KEY, old);
+        return old;
+      }
+      return {};
+    };
     var saveCfg = async (patch) => {
       const C = require("@saltcorn/data/models/config");
       await C.setConfig(CFG_KEY, { ...await getCfg(), ...patch });
@@ -394,6 +405,9 @@ var require_installer = __commonJS({
       const { Table, Field, View, Page, Trigger, state } = M();
       const miss = missingDeps();
       if (miss.length) throw new Error(`installe d'abord : ${miss.join(", ")}`);
+      const vts = [...new Set((mod.views || []).map((v) => v.template))].filter((t) => !state.viewtemplates[t]);
+      const acts = [...new Set((mod.triggers || []).flatMap((t) => (t.steps || []).map((s) => s.action_name)))].filter((a) => !state.actions[a]);
+      if (vts.length || acts.length) throw new Error(`mets \xE0 jour ${[vts.length && `dysizz-ui (vues manquantes : ${vts.join(", ")})`, acts.length && `dysizz-flow (blocs manquants : ${acts.join(", ")})`].filter(Boolean).join(" et ")}`);
       const log = [];
       const cfg = await getCfg();
       const installed = new Set(cfg.installed || []);
@@ -449,6 +463,7 @@ var require_installer = __commonJS({
         } else if (reset || !my["v:" + v.name] || hash(ex.configuration) === my["v:" + v.name]) {
           await View.update({ configuration: cfgV, viewtemplate: v.template, table_id: tb ? tb.id : null, description: v.description || "", attributes: { ...ex.attributes || {}, ...attrs } }, ex.id);
           if (reset) log.push(`vue ${v.name} r\xE9initialis\xE9e`);
+          else if (hash(ex.configuration) !== hash(cfgV)) log.push(`vue ${v.name} mise \xE0 jour`);
         } else log.push(`vue ${v.name} gard\xE9e (tu l'as modifi\xE9e)`);
         my["v:" + v.name] = hash(cfgV);
       }
@@ -689,7 +704,7 @@ var require_accueil = __commonJS({
             K.view("accueil_chiffres"),
             right.length ? K.grid("dzv-grid-main", K.panel("Cette semaine", "far fa-calendar", K.view("accueil_semaine")), K.box("dzv-grid", ...right)) : K.panel("Cette semaine", "far fa-calendar", K.view("accueil_semaine")),
             ...bottom,
-            ...installed.size <= 1 ? [K.text('<div class="dzv-panel dzv-empty"><i class="fas fa-puzzle-piece"></i><p>Installe des modules (t\xE2ches, budget, mails, veille\u2026) depuis <a href="/dysizz-vie">la page Modules</a> : ils appara\xEEtront ici.</p></div>')] : []
+            ...installed.size <= 1 ? [K.text('<div class="dzv-panel dzv-empty"><i class="fas fa-puzzle-piece"></i><p>Installe des modules (t\xE2ches, budget, mails, veille\u2026) depuis <a href="/dysizz-me">la page Modules</a> : ils appara\xEEtront ici.</p></div>')] : []
           ];
         }
       }],
@@ -2129,6 +2144,129 @@ var require_actus = __commonJS({
   }
 });
 
+// ../src/modules/surveillance.js
+var require_surveillance = __commonJS({
+  "../src/modules/surveillance.js"(exports2, module2) {
+    "use strict";
+    var K = require_kit();
+    var PREPARER = `// row.sites = les sites avant l'appel, row.resultats = l'appel (m\xEAme ordre)
+const avant = new Map((row.sites || []).map((s) => [s.id, s]));
+const quand = new Date().toISOString();
+const maj = [], mesures = [], evenements = [];
+for (const r of row.resultats || []) {
+  const s = avant.get(r.id) || {};
+  maj.push({ id: r.id, etat: r.etat, ms: r.ms, code_http: r.statut, raison: r.raison || "", verifie_le: quand });
+  mesures.push({ quand, site: s.nom || r.url, ms: r.ms });
+  if (s.etat !== r.etat && (s.etat || r.etat !== "ok"))
+    evenements.push({ quand, site: s.nom || r.url, etat: r.etat, message: s.etat ? (r.etat === "ok" ? "de nouveau en ligne" : r.etat === "lent" ? "r\xE9pond lentement" + (r.raison ? " : " + r.raison : "") : "en panne" + (r.raison ? " : " + r.raison : "")) : "premi\xE8re v\xE9rification : " + r.etat });
+}
+const pannes = (row.resultats || []).filter((r) => r.etat === "panne");
+return { maj, mesures, evenements, pannes, texte: pannes.map((p) => "- " + (avant.get(p.id) || {}).nom + " (" + (p.raison || "?") + ")").join("\\n") };`;
+    var TLS = `// row.sites et row.tls sont dans le m\xEAme ordre
+const maj = (row.sites || []).map((s, i) => { const c = (row.tls || [])[i] || {}; return { id: s.id, tls_jours: c.jours_restants ?? null, tls_expire_le: c.fin || null }; });
+const bientot = (row.sites || []).filter((s, i) => { const c = (row.tls || [])[i] || {}; return c.jours_restants !== null && c.jours_restants !== undefined && c.jours_restants <= (s.tls_alerte_jours || 14); });
+return { maj, bientot, texte: bientot.map((s) => "- " + s.nom).join("\\n") };`;
+    var TLS_FML = `tls_jours === null || tls_jours === undefined ? '' : tls_jours < 0 ? '<span class="dzv-meta dzv-late">certificat expir\xE9</span>' : tls_jours <= 14 ? '<span class="dzv-meta dzv-today">certificat : ' + tls_jours + ' j</span>' : '<span class="dzv-meta">certificat : ' + tls_jours + ' j</span>'`;
+    module2.exports = {
+      key: "surveillance",
+      label: "Surveillance",
+      icon: "fas fa-heartbeat",
+      group: "Syst\xE8me",
+      description: "Tes sites et services surveill\xE9s toutes les 5 minutes : en ligne, lent ou en panne, temps de r\xE9ponse en graphique, historique des incidents, certificats TLS qui expirent. Une seule alerte par incident, puis \xAB r\xE9tabli \xBB.",
+      depends: [],
+      setup: "<p>Ajoute tes sites (adresse compl\xE8te, ex. <code>https://monsite.fr</code>). Pour un service interne (base, SMTP\u2026), le bloc \xAB service joignable (TCP) \xBB de dysizz-flow peut \xEAtre ajout\xE9 au workflow.</p>",
+      tables: [
+        {
+          name: "surveillance_sites",
+          description: "Les sites et services surveill\xE9s",
+          fields: [
+            K.s("nom", "Nom", { required: true }),
+            K.s("url", "Adresse", { required: true, is_unique: true }),
+            K.bool("actif", "Surveill\xE9", { default: true }),
+            K.s("etat", "\xC9tat"),
+            K.int("ms", "Temps de r\xE9ponse (ms)"),
+            K.int("code_http", "Code HTTP"),
+            K.s("raison", "Raison"),
+            K.date("verifie_le", "V\xE9rifi\xE9 le"),
+            K.int("tls_jours", "Certificat : jours restants"),
+            K.date("tls_expire_le", "Certificat : expire le"),
+            K.int("tls_alerte_jours", "Pr\xE9venir (jours avant l'expiration du certificat)", { default: 14 }),
+            K.s("note", "Note")
+          ]
+        },
+        { name: "surveillance_mesures", description: "Temps de r\xE9ponse (gard\xE9s 30 jours)", fields: [K.date("quand", "Quand"), K.s("site", "Site"), K.int("ms", "Temps (ms)")] },
+        { name: "surveillance_evenements", description: "Changements d'\xE9tat (incidents, retours \xE0 la normale)", fields: [K.date("quand", "Quand"), K.s("site", "Site"), K.s("etat", "\xC9tat"), K.s("message", "Message")] }
+      ],
+      views: [
+        K.edit("site_modifier", "surveillance_sites", [["nom", "Nom"], ["url", "Adresse"], ["actif", "Surveill\xE9"], ["tls_alerte_jours", "Pr\xE9venir (jours avant l'expiration du certificat)"], ["note", "Note", "textarea"]], { delete: true, title: "Site surveill\xE9", width: 560 }),
+        K.custom("surveillance_statut", "DZ Statut", "surveillance_sites", { champ_nom: "nom", champ_etat: "etat", champ_detail: "ms", unite: "ms", champ_date: "verifie_le", vue: "site_modifier", filtre: '{"actif":true}', texte_vide: "Ajoute un premier site \xE0 surveiller" }, "\xC9tat de chaque site"),
+        K.custom("surveillance_temps", "DZ Graphique", "surveillance_mesures", { champ_date: "quand", champ_valeur: "ms", calcul: "moyenne", champ_serie: "site", periode: "last7", pas: "heure", type: "courbe", format: "int", hauteur: 220, texte_vide: "Les temps de r\xE9ponse appara\xEEtront apr\xE8s les premi\xE8res v\xE9rifications" }, "Temps de r\xE9ponse moyen par heure, un trait par site"),
+        K.custom("surveillance_journal", "DZ Journal", "surveillance_evenements", { champ_date: "quand", champ_message: "message", champ_niveau: "etat", champ_source: "site", jours: 30, limite: 200, texte_vide: "Aucun incident sur 30 jours" }, "Incidents et retours \xE0 la normale"),
+        K.list("sites_liste", "surveillance_sites", [
+          ["Site", K.field("nom", "as_text")],
+          ["Adresse", K.field("url", "as_text")],
+          ["\xC9tat", K.field("etat", "as_text", { cls: "dzv-pill" })],
+          ["Temps", K.field("ms", "show")],
+          ["Certificat", K.formula(TLS_FML, { html: true, block: false })],
+          ["Surveill\xE9", K.field("actif", "show")]
+        ], { order: "nom", desc: false, rowClick: "`/view/site_modifier?id=${id}`", limit: 100, description: "Tous les sites" })
+      ],
+      triggers: [
+        K.wf("surveillance_verifier", "Often", null, "Toutes les ~5 min : appelle chaque site, note l'\xE9tat et le temps, garde l'historique, pr\xE9vient une fois par incident", [
+          K.st("verrou", "dzf_verrou", { action: "prendre", nom: "me-surveillance", duree: 240, sortie: "verrou" }, { next_step: 'verrou ? "sites" : ""' }),
+          K.st("sites", "dzf_table_chercher", { table: "surveillance_sites", filtre: K.J({ actif: true }), tri: "id", limite: 500, sortie: "sites" }),
+          K.st("appeler", "dzf_ping_http", { cibles: "{{sites}}", lent_ms: 2e3, delai_s: 10, en_parallele: 8, sortie: "resultats", delai_max: 120 }, { only_if: "sites.length > 0" }),
+          K.st("preparer", "dzf_code", { code: PREPARER, sortie: "p" }, { only_if: "sites.length > 0" }),
+          K.st("ranger", "dzf_table_upsert", { table: "surveillance_sites", liste: "{{p.maj}}", cle: "id", mettre_a_jour: "etat,ms,code_http,raison,verifie_le", sans_declencheurs: true, sortie: "bilan" }, { only_if: "sites.length > 0" }),
+          K.st("mesures", "dzf_table_ajouter", { table: "surveillance_mesures", liste: "{{p.mesures}}", sans_declencheurs: true, sortie: "mesures" }, { only_if: "sites.length > 0" }),
+          K.st("evenements", "dzf_table_ajouter", { table: "surveillance_evenements", liste: "{{p.evenements}}", sortie: "evenements" }, { only_if: "sites.length > 0 && p.evenements.length > 0" }),
+          K.st("alerte", "dzf_alerte", { cle: "me-sites", probleme: "{{p.pannes}}", silence_min: 60, sortie: "alerte" }, { only_if: "sites.length > 0" }),
+          K.st("prevenir", "dzf_notifier", { qui: "administrateurs", titre: "Surveillance : {{alerte.etat}}", texte: "{{p.texte}}", lien: "/page/surveillance", sortie: "notifies" }, { only_if: "sites.length > 0 && alerte.envoyer" }),
+          K.st("liberer", "dzf_verrou", { action: "lib\xE9rer", nom: "me-surveillance", sortie: "verrou_libre" })
+        ], { appeler: ["lent_ms", "delai_s"], alerte: ["silence_min"] }),
+        K.wf("surveillance_certificats", "Daily", null, "Chaque jour : v\xE9rifie le certificat TLS de chaque site en https et pr\xE9vient avant qu'il expire", [
+          K.st("sites", "dzf_table_chercher", { table: "surveillance_sites", filtre: K.J({ actif: true, url: { ilike: "https://" } }), tri: "id", limite: 500, sortie: "sites" }),
+          K.st("tls", "dzf_certificat_tls", { hotes: "{{sites}}", port: 443, sortie: "tls", delai_max: 180, si_erreur: "continuer" }, { only_if: "sites.length > 0" }),
+          K.st("preparer", "dzf_code", { code: TLS, sortie: "c" }, { only_if: "sites.length > 0 && tls" }),
+          K.st("ranger", "dzf_table_upsert", { table: "surveillance_sites", liste: "{{c.maj}}", cle: "id", mettre_a_jour: "tls_jours,tls_expire_le", sans_declencheurs: true, sortie: "bilan" }, { only_if: "sites.length > 0 && tls" }),
+          K.st("prevenir", "dzf_notifier", { qui: "administrateurs", titre: "Certificat(s) bient\xF4t expir\xE9(s)", texte: "{{c.texte}}", lien: "/page/surveillance", sortie: "notifies" }, { only_if: "sites.length > 0 && tls && c.bientot.length > 0" })
+        ]),
+        K.wf("surveillance_menage", "Weekly", null, "Chaque semaine : garde 30 jours de temps de r\xE9ponse et 180 jours d'incidents", [
+          K.st("mesures", "dzf_nettoyer", { table: "surveillance_mesures", champ_date: "quand", jours: 30, sortie: "mesures_supprimees" }),
+          K.st("evenements", "dzf_nettoyer", { table: "surveillance_evenements", champ_date: "quand", jours: 180, sortie: "evenements_supprimes" })
+        ])
+      ],
+      seedMerge: { surveillance_sites: "url" },
+      seeds: {
+        surveillance_sites: [{ nom: "AMBS Agency", url: "https://ambs-agency.com", actif: true, tls_alerte_jours: 14 }]
+      },
+      pages: [{
+        name: "surveillance",
+        title: "Surveillance",
+        quick: { label: "Site", url: "/view/site_modifier" },
+        content: [
+          K.view("surveillance_statut"),
+          K.grid(
+            "dzv-grid-2",
+            K.panel("Temps de r\xE9ponse", "fas fa-chart-line", K.view("surveillance_temps")),
+            K.panel("Incidents", "fas fa-stream", K.view("surveillance_journal"))
+          ),
+          K.panel("Tous les sites", "fas fa-list", K.view("sites_liste"), { actions: K.modalBtn("Ajouter", "/view/site_modifier") })
+        ]
+      }],
+      nav: [{ page: "surveillance", label: "Surveillance", icon: "fas fa-heartbeat", group: "Syst\xE8me", order: 10, keywords: "sites uptime panne serveur monitoring certificat tls" }],
+      quick: [{ label: "Surveiller un site", icon: "fas fa-heartbeat", url: "/view/site_modifier", keywords: "uptime monitoring" }],
+      explain: [
+        ["Toutes les 5 minutes", "Le workflow \xAB surveillance_verifier \xBB : Verrou (une seule ex\xE9cution \xE0 la fois) \u2192 Table : chercher les sites \u2192 Surveillance : site en ligne ? (en parall\xE8le) \u2192 Code (ce qui a chang\xE9) \u2192 Table : ajouter ou mettre \xE0 jour \u2192 Table : ajouter (mesures, incidents) \u2192 Alerte (sans spam) \u2192 Notifier."],
+        ["Une seule alerte", "Le bloc \xAB Alerte (sans spam) \xBB ne pr\xE9vient qu'une fois par heure tant que la panne dure, puis une fois quand tout est r\xE9tabli."],
+        ["Le graphique", "Vue \xAB surveillance_temps \xBB (DZ Graphique) : moyenne par heure des temps de la table surveillance_mesures, un trait par site. Le regroupement est fait par la base."],
+        ["Les certificats", "Le workflow \xAB surveillance_certificats \xBB (chaque jour) lit le certificat TLS de chaque site en https, range le nombre de jours restants et pr\xE9vient avant l'expiration."],
+        ["Le m\xE9nage", "\xAB surveillance_menage \xBB (chaque semaine) garde 30 jours de mesures et 180 jours d'incidents, pour que les tables restent l\xE9g\xE8res."]
+      ]
+    };
+  }
+});
+
 // ../src/modules/index.js
 var require_modules = __commonJS({
   "../src/modules/index.js"(exports2, module2) {
@@ -2145,7 +2283,8 @@ var require_modules = __commonJS({
       require_emploi(),
       require_veille(),
       require_videos(),
-      require_actus()
+      require_actus(),
+      require_surveillance()
     ];
   }
 });
@@ -2184,8 +2323,8 @@ var require_admin = __commonJS({
 <div class="dzv-mod-counts"><span>${(m.tables || []).length} tables</span><span>${(m.views || []).length} vues</span><span>${(m.pages || []).length} pages</span><span>${(m.triggers || []).length} workflows</span></div>
 ${deps.length ? `<div class="dzv-mod-deps">Utilise : ${esc(deps.join(", "))}</div>` : ""}
 <div class="dzv-mod-actions">
-${form(req, `/dysizz-vie/install/${m.key}`, `<button class="btn btn-sm ${st.installed ? "btn-outline-secondary" : "btn-primary"}">${st.installed ? "Mettre \xE0 jour" : "Installer"}</button>`)}
-<a class="btn btn-sm btn-link" href="/dysizz-vie/m/${m.key}">Ce qu'il y a derri\xE8re</a>
+${form(req, `/dysizz-me/install/${m.key}`, `<button class="btn btn-sm ${st.installed ? "btn-outline-secondary" : "btn-primary"}">${st.installed ? "Mettre \xE0 jour" : "Installer"}</button>`)}
+<a class="btn btn-sm btn-link" href="/dysizz-me/m/${m.key}">Ce qu'il y a derri\xE8re</a>
 ${st.installed && (m.pages || [])[0] ? `<a class="btn btn-sm btn-link" href="/page/${esc(m.pages[0].name)}">Ouvrir</a>` : ""}
 </div></div>`);
         }
@@ -2193,15 +2332,15 @@ ${st.installed && (m.pages || [])[0] ? `<a class="btn btn-sm btn-link" href="/pa
       }
       const miss = require_installer().missingDeps();
       wrap(res, "Modules", `${flash(req)}
-<div class="dzv-admin-top"><div><h1>Ma vie</h1><p>La solution est d\xE9coup\xE9e en modules. Chacun ajoute des tables, des vues (blocs de dysizz-ui), des pages et des workflows (blocs de dysizz-flow). Tout reste modifiable dans Saltcorn ; \xAB Ce qu'il y a derri\xE8re \xBB montre comment chaque module fonctionne. Version ${esc(VERSION)}.</p></div>
-${form(req, "/dysizz-vie/install-all", '<button class="btn btn-primary"><i class="fas fa-magic"></i> Tout installer</button>')}</div>
+<div class="dzv-admin-top"><div><h1>Me</h1><p>La solution est d\xE9coup\xE9e en modules. Chacun ajoute des tables, des vues (blocs de dysizz-ui), des pages et des workflows (blocs de dysizz-flow). Tout reste modifiable dans Saltcorn ; \xAB Ce qu'il y a derri\xE8re \xBB montre comment chaque module fonctionne. Version ${esc(VERSION)}.</p></div>
+${form(req, "/dysizz-me/install-all", '<button class="btn btn-primary"><i class="fas fa-magic"></i> Tout installer</button>')}</div>
 ${miss.length ? `<div class="dzv-flash dzv-ko">Cette solution a besoin de : <b>${esc(miss.join(", "))}</b>. Installe-les d'abord (Param\xE8tres \u2192 Modules).</div>` : ""}
 ${cards.join("")}`);
     };
     var detail = async (req, res) => {
       if (!isAdmin(req)) return denied(res);
       const m = MODULES.find((x) => x.key === req.params.key);
-      if (!m) return res.redirect("/dysizz-vie");
+      if (!m) return res.redirect("/dysizz-me");
       const st = await moduleStatus(m);
       const changed = (x) => x.changed ? ` <span class="dzv-st dzv-st-part" title="Tu l'as modifi\xE9 : une mise \xE0 jour ne l'\xE9crase pas">modifi\xE9</span>` : "";
       const missing = (x) => x.exists ? "" : ' <span class="dzv-st">absent</span>';
@@ -2235,10 +2374,10 @@ ${s.id ? `<a class="dzv-edit" href="/actions/configure/${s.id}">ouvrir dans l'\x
       const flow = (m.explain || []).map(([a, b]) => `<div class="dzv-flow"><div class="dzv-flow-q">${esc(a)}</div><i class="fas fa-arrow-right"></i><div class="dzv-flow-a">${esc(b)}</div></div>`).join("");
       const dependents = MODULES.filter((x) => (x.depends || []).includes(m.key)).map((x) => x.label);
       wrap(res, `Module ${m.label}`, `${flash(req)}
-<p><a href="/dysizz-vie">\u2190 Modules</a></p>
+<p><a href="/dysizz-me">\u2190 Modules</a></p>
 <div class="dzv-admin-top"><div><h1><i class="${esc(m.icon)}"></i> ${esc(m.label)} ${badge(st)}</h1><p>${esc(m.description)}</p>
 ${(m.depends || []).length ? `<p class="dzv-muted">S'appuie sur : ${esc(m.depends.join(", "))}.</p>` : ""}${dependents.length ? `<p class="dzv-muted">Utilis\xE9 par : ${esc(dependents.join(", "))}.</p>` : ""}</div>
-<div class="dzv-mod-actions">${form(req, `/dysizz-vie/install/${m.key}?back=m`, `<button class="btn btn-primary">${st.installed ? "Mettre \xE0 jour" : "Installer"}</button>`)}</div></div>
+<div class="dzv-mod-actions">${form(req, `/dysizz-me/install/${m.key}?back=m`, `<button class="btn btn-primary">${st.installed ? "Mettre \xE0 jour" : "Installer"}</button>`)}</div></div>
 ${m.setup ? `<div class="dzv-setup"><h2>\xC0 r\xE9gler</h2>${m.setup}</div>` : ""}
 <h2>Comment \xE7a marche</h2><div class="dzv-flows">${flow}</div>
 <h2>Tables</h2>${tables}
@@ -2247,22 +2386,22 @@ ${m.setup ? `<div class="dzv-setup"><h2>\xC0 r\xE9gler</h2>${m.setup}</div>` : "
 <h2>Workflows <small class="dzv-muted">(faits de blocs dysizz-flow)</small></h2>${triggers || '<p class="dzv-muted">Aucun.</p>'}
 <h2>Entretien</h2>
 <div class="dzv-danger">
-${form(req, `/dysizz-vie/install/${m.key}?reset=1&back=m`, '<button class="btn btn-outline-warning btn-sm">R\xE9initialiser vues, pages et workflows</button>', { confirm: "Tes modifications des vues, pages et workflows de ce module seront remplac\xE9es par la version du module. Tes donn\xE9es ne bougent pas. Continuer ?" })}
-${form(req, `/dysizz-vie/uninstall/${m.key}`, '<button class="btn btn-outline-secondary btn-sm">Retirer (garder les donn\xE9es)</button>', { confirm: "Retirer les pages, vues et d\xE9clencheurs de ce module ? Les tables et leurs donn\xE9es restent." })}
-${form(req, `/dysizz-vie/uninstall/${m.key}?drop=1`, `<input name="confirm" placeholder="tape ${esc(m.key)}" class="form-control form-control-sm" style="width:140px;display:inline-block"> <button class="btn btn-outline-danger btn-sm">Tout supprimer, donn\xE9es comprises</button>`)}
+${form(req, `/dysizz-me/install/${m.key}?reset=1&back=m`, '<button class="btn btn-outline-warning btn-sm">R\xE9initialiser vues, pages et workflows</button>', { confirm: "Tes modifications des vues, pages et workflows de ce module seront remplac\xE9es par la version du module. Tes donn\xE9es ne bougent pas. Continuer ?" })}
+${form(req, `/dysizz-me/uninstall/${m.key}`, '<button class="btn btn-outline-secondary btn-sm">Retirer (garder les donn\xE9es)</button>', { confirm: "Retirer les pages, vues et d\xE9clencheurs de ce module ? Les tables et leurs donn\xE9es restent." })}
+${form(req, `/dysizz-me/uninstall/${m.key}?drop=1`, `<input name="confirm" placeholder="tape ${esc(m.key)}" class="form-control form-control-sm" style="width:140px;display:inline-block"> <button class="btn btn-outline-danger btn-sm">Tout supprimer, donn\xE9es comprises</button>`)}
 </div>`);
     };
     var go = (res, url, key, msg, isErr) => res.redirect(`${url}${url.includes("?") ? "&" : "?"}${isErr ? "err" : "ok"}=${encodeURIComponent(msg)}`);
     var install = async (req, res) => {
       if (!isAdmin(req)) return denied(res);
       const m = MODULES.find((x) => x.key === req.params.key);
-      if (!m) return res.redirect("/dysizz-vie");
-      const back = req.query.back === "m" ? `/dysizz-vie/m/${m.key}` : "/dysizz-vie";
+      if (!m) return res.redirect("/dysizz-me");
+      const back = req.query.back === "m" ? `/dysizz-me/m/${m.key}` : "/dysizz-me";
       try {
         const log = await installModule(m, MODULES, { reset: req.query.reset === "1" });
         go(res, back, m.key, `${m.label} : ${log.length ? log.slice(0, 25).join(" \xB7 ") + (log.length > 25 ? ` \xB7 (+${log.length - 25})` : "") : "d\xE9j\xE0 \xE0 jour"}`);
       } catch (e) {
-        console.error("[dysizz-vie]", e);
+        console.error("[dysizz-me]", e);
         go(res, back, m.key, `${m.label} : ${e.message}`, true);
       }
     };
@@ -2274,23 +2413,23 @@ ${form(req, `/dysizz-vie/uninstall/${m.key}?drop=1`, `<input name="confirm" plac
           await installModule(m, MODULES);
           done.push(m.label);
         }
-        go(res, "/dysizz-vie", "", `Install\xE9s : ${done.join(", ")}. Ta page d'accueil : /page/accueil`);
+        go(res, "/dysizz-me", "", `Install\xE9s : ${done.join(", ")}. Ta page d'accueil : /page/accueil`);
       } catch (e) {
-        console.error("[dysizz-vie]", e);
-        go(res, "/dysizz-vie", "", `Arr\xEAt apr\xE8s ${done.join(", ") || "rien"} : ${e.message}`, true);
+        console.error("[dysizz-me]", e);
+        go(res, "/dysizz-me", "", `Arr\xEAt apr\xE8s ${done.join(", ") || "rien"} : ${e.message}`, true);
       }
     };
     var uninstall = async (req, res) => {
       if (!isAdmin(req)) return denied(res);
       const m = MODULES.find((x) => x.key === req.params.key);
-      if (!m) return res.redirect("/dysizz-vie");
+      if (!m) return res.redirect("/dysizz-me");
       const drop = req.query.drop === "1";
-      if (drop && (req.body || {}).confirm !== m.key) return go(res, `/dysizz-vie/m/${m.key}`, m.key, `Tape \xAB ${m.key} \xBB pour confirmer la suppression des donn\xE9es`, true);
+      if (drop && (req.body || {}).confirm !== m.key) return go(res, `/dysizz-me/m/${m.key}`, m.key, `Tape \xAB ${m.key} \xBB pour confirmer la suppression des donn\xE9es`, true);
       try {
         const log = await uninstallModule(m, MODULES, { dropTables: drop });
-        go(res, "/dysizz-vie", m.key, `${m.label} retir\xE9 : ${log.join(" \xB7 ") || "rien \xE0 retirer"}`);
+        go(res, "/dysizz-me", m.key, `${m.label} retir\xE9 : ${log.join(" \xB7 ") || "rien \xE0 retirer"}`);
       } catch (e) {
-        go(res, `/dysizz-vie/m/${m.key}`, m.key, e.message, true);
+        go(res, `/dysizz-me/m/${m.key}`, m.key, e.message, true);
       }
     };
     module2.exports = { home, detail, install, installAll, uninstall };
@@ -2304,10 +2443,10 @@ module.exports = {
   sc_plugin_api_version: 1,
   plugin_name: PLUGIN,
   routes: [
-    { url: "/dysizz-vie", method: "get", callback: admin.home },
-    { url: "/dysizz-vie/m/:key", method: "get", callback: admin.detail },
-    { url: "/dysizz-vie/install/:key", method: "post", callback: admin.install },
-    { url: "/dysizz-vie/install-all", method: "post", callback: admin.installAll },
-    { url: "/dysizz-vie/uninstall/:key", method: "post", callback: admin.uninstall }
+    { url: "/dysizz-me", method: "get", callback: admin.home },
+    { url: "/dysizz-me/m/:key", method: "get", callback: admin.detail },
+    { url: "/dysizz-me/install/:key", method: "post", callback: admin.install },
+    { url: "/dysizz-me/install-all", method: "post", callback: admin.installAll },
+    { url: "/dysizz-me/uninstall/:key", method: "post", callback: admin.uninstall }
   ]
 };

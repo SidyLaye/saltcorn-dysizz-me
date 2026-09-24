@@ -10,10 +10,10 @@ Module._load = function (req, ...rest) {
 const MODULES = require("../src/modules");
 const { shellLayout } = require("../src/lib/shell");
 const NATIVE = ["List", "Show", "Edit", "Feed", "Filter"];
-const OURS = ["DZ Indicateurs", "DZ Tableau", "DZ Répartition", "DZ À venir"];
+const OURS = ["DZ Indicateurs", "DZ Tableau", "DZ Répartition", "DZ À venir", "DZ Graphique", "DZ Calendrier", "DZ Journal", "DZ Statut"];
 /* les blocs de dysizz-flow et leurs réglages (tests/flow-blocks.json, copié depuis dysizz-flow) */
 const FLOW = require("./flow-blocks.json");
-const COMMON = ["sortie", "si_erreur", "delai_max", "journaliser"];
+const COMMON = ["sortie", "si_erreur", "delai_max", "journaliser", "essais", "pause_essais"];
 const keys = new Set(MODULES.map((m) => m.key));
 const tables = new Map();
 const views = new Map();
@@ -62,6 +62,8 @@ for (const v of views.values()) {
   });
   if (v.template === "Feed") assert(views.get(cfg.show_view)?.template === "Show", `${v.name} : show_view ${cfg.show_view}`);
   if (v.template === "DZ Tableau") assert(tables.get(v.table).has(cfg.champ_colonnes), `${v.name} : champ des colonnes`);
+  if (["DZ Graphique", "DZ Calendrier", "DZ Journal", "DZ Statut"].includes(v.template)) for (const [k, f] of Object.entries(cfg)) if (k.startsWith("champ_") && f) assert(tables.get(v.table).has(f), `${v.name} : ${k} « ${f} » absent de ${v.table}`);
+  if (["DZ Graphique", "DZ Calendrier", "DZ Journal", "DZ Statut"].includes(v.template) && cfg.vue) assert(views.has(cfg.vue), `${v.name} : vue ${cfg.vue} inconnue`);
   if (v.template === "DZ Indicateurs") JSON.parse(cfg.tuiles);
   if (v.template === "DZ À venir") JSON.parse(cfg.sources);
 }

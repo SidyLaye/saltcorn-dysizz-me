@@ -1,4 +1,4 @@
-/* dysizz-vie — installation des modules.
+/* dysizz-me — installation des modules.
    Un module = des tables + des vues + des pages + des déclencheurs, décrits
    dans src/modules/<module>.js. L'installation est « idempotente » : on peut
    la relancer autant de fois qu'on veut.
@@ -23,11 +23,20 @@ const M = () => ({
 });
 
 /* ---------- état des modules (installés + empreintes) ----------
-   Rangé dans la configuration du tenant (clé « dysizz_vie »), pas dans
+   Rangé dans la configuration du tenant (clé « dysizz_me »), pas dans
    celle du plugin : une réinstallation ou mise à jour du plugin ne l'efface pas. */
-const CFG_KEY = "dysizz_vie";
+const CFG_KEY = "dysizz_me";
 /* lu et écrit directement en base : le cache de configuration de Saltcorn ne garde que ses propres clés */
-const getCfg = async () => (await require("@saltcorn/data/models/config").getConfig(CFG_KEY, {})) || {};
+/* l'ancienne clé (quand la solution s'appelait dysizz-vie) est reprise une fois, sans rien perdre */
+const OLD_KEY = "dysizz_vie";
+const getCfg = async () => {
+  const C = require("@saltcorn/data/models/config");
+  const cur = await C.getConfig(CFG_KEY, null);
+  if (cur) return cur;
+  const old = await C.getConfig(OLD_KEY, null);
+  if (old) { await C.setConfig(CFG_KEY, old); return old; }
+  return {};
+};
 const saveCfg = async (patch) => {
   const C = require("@saltcorn/data/models/config");
   await C.setConfig(CFG_KEY, { ...(await getCfg()), ...patch });
@@ -117,6 +126,10 @@ const installModule = async (mod, allMods, { reset = false } = {}) => {
   const { Table, Field, View, Page, Trigger, state } = M();
   const miss = missingDeps();
   if (miss.length) throw new Error(`installe d'abord : ${miss.join(", ")}`);
+  /* chaque module peut utiliser des vues ou des blocs plus récents : on vérifie tout avant d'écrire quoi que ce soit */
+  const vts = [...new Set((mod.views || []).map((v) => v.template))].filter((t) => !state.viewtemplates[t]);
+  const acts = [...new Set((mod.triggers || []).flatMap((t) => (t.steps || []).map((s) => s.action_name)))].filter((a) => !state.actions[a]);
+  if (vts.length || acts.length) throw new Error(`mets à jour ${[vts.length && `dysizz-ui (vues manquantes : ${vts.join(", ")})`, acts.length && `dysizz-flow (blocs manquants : ${acts.join(", ")})`].filter(Boolean).join(" et ")}`);
   const log = [];
   const cfg = await getCfg();
   const installed = new Set(cfg.installed || []);
@@ -173,6 +186,7 @@ const installModule = async (mod, allMods, { reset = false } = {}) => {
     } else if (reset || !my["v:" + v.name] || hash(ex.configuration) === my["v:" + v.name]) {
       await View.update({ configuration: cfgV, viewtemplate: v.template, table_id: tb ? tb.id : null, description: v.description || "", attributes: { ...(ex.attributes || {}), ...attrs } }, ex.id);
       if (reset) log.push(`vue ${v.name} réinitialisée`);
+      else if (hash(ex.configuration) !== hash(cfgV)) log.push(`vue ${v.name} mise à jour`);
     } else log.push(`vue ${v.name} gardée (tu l'as modifiée)`);
     my["v:" + v.name] = hash(cfgV);
   }

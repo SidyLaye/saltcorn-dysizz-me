@@ -1,7 +1,7 @@
-/* dysizz-vie — constantes et petits utilitaires partagés */
+/* dysizz-me — constantes et petits utilitaires partagés */
 "use strict";
 
-const PLUGIN = "dysizz-vie";
+const PLUGIN = "dysizz-me";
 const VERSION = typeof __DZV_VERSION__ !== "undefined" ? __DZV_VERSION__ : "dev";
 const isAdmin = (req) => !!(req && req.user && req.user.role_id === 1);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));

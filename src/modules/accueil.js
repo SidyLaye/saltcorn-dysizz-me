@@ -50,7 +50,7 @@ module.exports = {
         K.view("accueil_chiffres"),
         right.length ? K.grid("dzv-grid-main", K.panel("Cette semaine", "far fa-calendar", K.view("accueil_semaine")), K.box("dzv-grid", ...right)) : K.panel("Cette semaine", "far fa-calendar", K.view("accueil_semaine")),
         ...bottom,
-        ...(installed.size <= 1 ? [K.text('<div class="dzv-panel dzv-empty"><i class="fas fa-puzzle-piece"></i><p>Installe des modules (tâches, budget, mails, veille…) depuis <a href="/dysizz-vie">la page Modules</a> : ils apparaîtront ici.</p></div>')] : []),
+        ...(installed.size <= 1 ? [K.text('<div class="dzv-panel dzv-empty"><i class="fas fa-puzzle-piece"></i><p>Installe des modules (tâches, budget, mails, veille…) depuis <a href="/dysizz-me">la page Modules</a> : ils apparaîtront ici.</p></div>')] : []),
       ];
     },
   }],

@@ -1,4 +1,4 @@
-/* dysizz-vie — la « coquille » commune à toutes les pages des modules :
+/* dysizz-me — la « coquille » commune à toutes les pages des modules :
    menu latéral (ordinateur), barre du bas + tiroir (mobile), barre du haut,
    palette Ctrl K. Elle est régénérée à chaque installation / retrait de module,
    pour que le menu montre toujours exactement les modules installés.
@@ -8,21 +8,21 @@
 const { esc } = require("../core");
 const { box, O, text } = require("./layout");
 
-const GROUPS = ["Aujourd'hui", "Organisation", "Vie perso", "Travail", "Veille"];
+const GROUPS = ["Aujourd'hui", "Organisation", "Vie perso", "Travail", "Veille", "Système"];
 
 const navItems = (mods) =>
   mods.flatMap((m) => (m.nav || []).map((n) => ({ ...n, module: m.key })))
     .sort((a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group) || (a.order || 50) - (b.order || 50));
 
 const sideHtml = (items, current) => {
-  let html = `<a class="dz-brand dzv-brand" href="/page/accueil"><span class="dz-brand-mark"></span>Ma vie</a>
+  let html = `<a class="dz-brand dzv-brand" href="/page/accueil"><span class="dz-brand-mark"></span>Me</a>
 <button class="dz-search dzv-search" type="button" data-dz-cmdk-open><i class="fas fa-search"></i><span>Aller à…</span><span class="dz-kbd">Ctrl K</span></button>`;
   let g = null;
   for (const it of items) {
     if (it.group !== g) { g = it.group; html += `<div class="dz-side-label">${esc(g)}</div>`; }
     html += `<a class="dz-side-item${it.page === current ? " dz-active" : ""}" href="/page/${esc(it.page)}"><i class="${esc(it.icon)}"></i>${esc(it.label)}</a>`;
   }
-  html += `<div class="dz-side-foot dzv-side-foot"><a href="/dysizz-vie" class="dzv-foot-link"><i class="fas fa-puzzle-piece"></i>Modules</a><button class="dz-btn dz-btn-ghost dz-icon-btn dz-theme-btn" data-dz-theme-toggle aria-label="Thème"><i class="fas fa-moon dz-moon"></i><i class="fas fa-sun dz-sun"></i></button></div>`;
+  html += `<div class="dz-side-foot dzv-side-foot"><a href="/dysizz-me" class="dzv-foot-link"><i class="fas fa-puzzle-piece"></i>Modules</a><button class="dz-btn dz-btn-ghost dz-icon-btn dz-theme-btn" data-dz-theme-toggle aria-label="Thème"><i class="fas fa-moon dz-moon"></i><i class="fas fa-sun dz-sun"></i></button></div>`;
   return html;
 };
 
@@ -50,7 +50,7 @@ ${items.map((i) => `<a href="/page/${esc(i.page)}" data-keywords="${esc(i.keywor
 <div class="dz-cmdk-group">Créer</div>
 ${quick.map((q) => `<a href="javascript:ajax_modal('${esc(q.url)}')" data-keywords="ajouter nouveau nouvelle ${esc(q.keywords || "")}"><i class="${esc(q.icon)}"></i>${esc(q.label)}</a>`).join("\n")}
 <div class="dz-cmdk-group">Réglages</div>
-<a href="/dysizz-vie" data-keywords="modules installer"><i class="fas fa-puzzle-piece"></i>Modules</a>
+<a href="/dysizz-me" data-keywords="modules installer"><i class="fas fa-puzzle-piece"></i>Modules</a>
 <a href="#" data-dz-theme-toggle data-keywords="sombre clair"><i class="fas fa-adjust"></i>Changer de thème</a>
 <div class="dz-cmdk-empty" hidden>Aucun résultat</div>
 </div>

@@ -14,4 +14,5 @@ module.exports = [
   require("./veille"),
   require("./videos"),
   require("./actus"),
+  require("./surveillance"),
 ];

@@ -14,6 +14,7 @@
 - [Veille tech](#veille) — Les nouveautés dev, cyber (dont alertes CERT-FR), IA, DevOps, MLOps, cloud, réseau et systèmes, lues toutes les heures depuis des flux RSS que tu choisis. Lu, favori, à lire plus tard.
 - [Vidéos](#videos) — Les dernières vidéos des chaînes YouTube dev, cyber, IA, DevOps/MLOps, réseau et systèmes que tu suis, regardées directement dans l'appli (sans pub de suivi, lecteur youtube-nocookie).
 - [Actus France & Sénégal](#actus) — Les titres du jour en France et au Sénégal côte à côte (franceinfo, Le Monde, France 24, Seneweb, Dakaractu, APS, Le Soleil, RFI Afrique…), mis à jour toutes les heures.
+- [Surveillance](#surveillance) — Tes sites et services surveillés toutes les 5 minutes : en ligne, lent ou en panne, temps de réponse en graphique, historique des incidents, certificats TLS qui expirent. Une seule alerte par incident, puis « rétabli ».
 
 ---
 
@@ -1024,4 +1025,146 @@ S'appuie sur : veille.
 ### Pages
 
 - `/page/actus` — Actus France & Sénégal
+
+
+---
+
+## <a id="surveillance"></a>Surveillance
+
+Tes sites et services surveillés toutes les 5 minutes : en ligne, lent ou en panne, temps de réponse en graphique, historique des incidents, certificats TLS qui expirent. Une seule alerte par incident, puis « rétabli ».
+
+### À régler
+
+Ajoute tes sites (adresse complète, ex. `https://monsite.fr`). Pour un service interne (base, SMTP…), le bloc « service joignable (TCP) » de dysizz-flow peut être ajouté au workflow.
+
+### Comment ça marche
+
+| Quand | Ce qui se passe |
+|---|---|
+| Toutes les 5 minutes | Le workflow « surveillance_verifier » : Verrou (une seule exécution à la fois) → Table : chercher les sites → Surveillance : site en ligne ? (en parallèle) → Code (ce qui a changé) → Table : ajouter ou mettre à jour → Table : ajouter (mesures, incidents) → Alerte (sans spam) → Notifier. |
+| Une seule alerte | Le bloc « Alerte (sans spam) » ne prévient qu'une fois par heure tant que la panne dure, puis une fois quand tout est rétabli. |
+| Le graphique | Vue « surveillance_temps » (DZ Graphique) : moyenne par heure des temps de la table surveillance_mesures, un trait par site. Le regroupement est fait par la base. |
+| Les certificats | Le workflow « surveillance_certificats » (chaque jour) lit le certificat TLS de chaque site en https, range le nombre de jours restants et prévient avant l'expiration. |
+| Le ménage | « surveillance_menage » (chaque semaine) garde 30 jours de mesures et 180 jours d'incidents, pour que les tables restent légères. |
+
+### Table `surveillance_sites`
+
+Les sites et services surveillés
+
+| Champ | Type | Détail |
+|---|---|---|
+| `nom` Nom | String, obligatoire |  |
+| `url` Adresse | String, obligatoire |  |
+| `actif` Surveillé | Bool |  |
+| `etat` État | String |  |
+| `ms` Temps de réponse (ms) | Integer |  |
+| `code_http` Code HTTP | Integer |  |
+| `raison` Raison | String |  |
+| `verifie_le` Vérifié le | Date |  |
+| `tls_jours` Certificat : jours restants | Integer |  |
+| `tls_expire_le` Certificat : expire le | Date |  |
+| `tls_alerte_jours` Prévenir (jours avant l'expiration du certificat) | Integer |  |
+| `note` Note | String |  |
+
+### Table `surveillance_mesures`
+
+Temps de réponse (gardés 30 jours)
+
+| Champ | Type | Détail |
+|---|---|---|
+| `quand` Quand | Date |  |
+| `site` Site | String |  |
+| `ms` Temps (ms) | Integer |  |
+
+### Table `surveillance_evenements`
+
+Changements d'état (incidents, retours à la normale)
+
+| Champ | Type | Détail |
+|---|---|---|
+| `quand` Quand | Date |  |
+| `site` Site | String |  |
+| `etat` État | String |  |
+| `message` Message | String |  |
+
+### Vues
+
+| Vue | Type | Table | Rôle |
+|---|---|---|---|
+| `site_modifier` | Edit | surveillance_sites | Formulaire surveillance_sites |
+| `surveillance_statut` | DZ Statut | surveillance_sites | État de chaque site |
+| `surveillance_temps` | DZ Graphique | surveillance_mesures | Temps de réponse moyen par heure, un trait par site |
+| `surveillance_journal` | DZ Journal | surveillance_evenements | Incidents et retours à la normale |
+| `sites_liste` | List | surveillance_sites | Tous les sites |
+
+### Pages
+
+- `/page/surveillance` — Surveillance
+
+### Workflows (blocs dysizz-flow)
+
+#### `surveillance_verifier` — Often
+
+Toutes les ~5 min : appelle chaque site, note l'état et le temps, garde l'historique, prévient une fois par incident.
+
+| Étape | Bloc | Condition |
+|---|---|---|
+| verrou | `dzf_verrou` |  suite : `verrou ? "sites" : ""` |
+| sites | `dzf_table_chercher` |  |
+| appeler | `dzf_ping_http` | `sites.length > 0` |
+| preparer | `dzf_code` | `sites.length > 0` |
+| ranger | `dzf_table_upsert` | `sites.length > 0` |
+| mesures | `dzf_table_ajouter` | `sites.length > 0` |
+| evenements | `dzf_table_ajouter` | `sites.length > 0 && p.evenements.length > 0` |
+| alerte | `dzf_alerte` | `sites.length > 0` |
+| prevenir | `dzf_notifier` | `sites.length > 0 && alerte.envoyer` |
+| liberer | `dzf_verrou` |  |
+
+Code de l'étape `preparer` :
+
+```js
+// row.sites = les sites avant l'appel, row.resultats = l'appel (même ordre)
+const avant = new Map((row.sites || []).map((s) => [s.id, s]));
+const quand = new Date().toISOString();
+const maj = [], mesures = [], evenements = [];
+for (const r of row.resultats || []) {
+  const s = avant.get(r.id) || {};
+  maj.push({ id: r.id, etat: r.etat, ms: r.ms, code_http: r.statut, raison: r.raison || "", verifie_le: quand });
+  mesures.push({ quand, site: s.nom || r.url, ms: r.ms });
+  if (s.etat !== r.etat && (s.etat || r.etat !== "ok"))
+    evenements.push({ quand, site: s.nom || r.url, etat: r.etat, message: s.etat ? (r.etat === "ok" ? "de nouveau en ligne" : r.etat === "lent" ? "répond lentement" + (r.raison ? " : " + r.raison : "") : "en panne" + (r.raison ? " : " + r.raison : "")) : "première vérification : " + r.etat });
+}
+const pannes = (row.resultats || []).filter((r) => r.etat === "panne");
+return { maj, mesures, evenements, pannes, texte: pannes.map((p) => "- " + (avant.get(p.id) || {}).nom + " (" + (p.raison || "?") + ")").join("\n") };
+```
+
+#### `surveillance_certificats` — Daily
+
+Chaque jour : vérifie le certificat TLS de chaque site en https et prévient avant qu'il expire.
+
+| Étape | Bloc | Condition |
+|---|---|---|
+| sites | `dzf_table_chercher` |  |
+| tls | `dzf_certificat_tls` | `sites.length > 0` |
+| preparer | `dzf_code` | `sites.length > 0 && tls` |
+| ranger | `dzf_table_upsert` | `sites.length > 0 && tls` |
+| prevenir | `dzf_notifier` | `sites.length > 0 && tls && c.bientot.length > 0` |
+
+Code de l'étape `preparer` :
+
+```js
+// row.sites et row.tls sont dans le même ordre
+const maj = (row.sites || []).map((s, i) => { const c = (row.tls || [])[i] || {}; return { id: s.id, tls_jours: c.jours_restants ?? null, tls_expire_le: c.fin || null }; });
+const bientot = (row.sites || []).filter((s, i) => { const c = (row.tls || [])[i] || {}; return c.jours_restants !== null && c.jours_restants !== undefined && c.jours_restants <= (s.tls_alerte_jours || 14); });
+return { maj, bientot, texte: bientot.map((s) => "- " + s.nom).join("\n") };
+```
+
+#### `surveillance_menage` — Weekly
+
+Chaque semaine : garde 30 jours de temps de réponse et 180 jours d'incidents.
+
+| Étape | Bloc | Condition |
+|---|---|---|
+| mesures | `dzf_nettoyer` |  |
+| evenements | `dzf_nettoyer` |  |
 

@@ -1,4 +1,4 @@
-/* dysizz-vie — petits constructeurs de layouts Saltcorn.
+/* dysizz-me — petits constructeurs de layouts Saltcorn.
    Ils produisent exactement le JSON que le constructeur de vues de Saltcorn
    enregistre : une vue créée ici s'ouvre et se modifie normalement dans
    Saltcorn (Vues → la vue → Modifier). */
