@@ -1,5 +1,13 @@
 # Journal des versions
 
+## 2.2.0
+
+- **Surveillance en profondeur** : 13 types de sondes (site, scénario d'API, port, DNS, changement DNS, certificat, domaine, contenu, liste noire, mail, Prometheus, battement de tâche cron, note de sécurité), intervalle par sonde, incidents avec durée, disponibilité 24 h / 7 j / 30 j, page de statut (publique si tu veux), alertes par notification, ntfy et Telegram.
+- **Emploi** : plusieurs sources (dont 5 sans clé), réglages des clés France Travail / Adzuna / Jooble, source et logo sur chaque offre.
+- **Veille et actus** : une image pour chaque article (image de la page si le flux n'en a pas, sinon vignette de couleur).
+- **Vidéos** : correction de l'erreur 153 de YouTube (politique de « referrer »), lien de secours vers YouTube.
+- Une modification faite par les pages Régler n'empêche plus les mises à jour des workflows.
+
 ## 2.1.0
 
 - **Pages « Régler »** (`/dysizz-me/reglages/<module>`) : Mails pro (adresse, offre OVH, mot de passe rangé chiffré, bouton Tester) et Emploi (clés France Travail). Plus besoin de toucher aux variables du serveur ni aux workflows ; les réglages sont réappliqués après chaque mise à jour.

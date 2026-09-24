@@ -13,15 +13,17 @@ if (!(await C.getRow({ offre: row.id })))
 await table.updateRow({ statut: "postulé" }, row.id, user);
 return { notify: "Ajoutée à tes candidatures", reload_page: true };`;
 
-const CHERCHER = `// Pour chaque recherche active : bloc France Travail, puis rangement sans doublon.
+const CHERCHER = `// Pour chaque recherche active : le bloc « Emploi : chercher dans plusieurs sources »,
+// puis rangement sans doublon. Chaque source en panne est notée dans l'état de la recherche.
 const R = Table.findOne({ name: "emploi_recherches" });
 let nouvelles = 0;
 for (const r of await R.getRows({ actif: true })) {
-  const o = await Actions.dzf_france_travail({ mots_cles: r.mots_cles || "", departement: r.departement || "", commune: r.commune || "", rayon_km: r.rayon_km || "", contrat: r.contrat || "", alternance: !!r.alternance, depuis_jours: r.depuis_jours || 7, sortie: "offres", si_erreur: "continuer" });
+  const o = await Actions.dzf_emplois({ sources: r.sources || "france_travail,adzuna,jooble,arbeitnow,remotive,jobicy,himalayas,remoteok", mots_cles: r.mots_cles || "", departement: r.departement || "", lieu: r.lieu || "", commune: r.commune || "", rayon_km: r.rayon_km || "", contrat: r.contrat || "", alternance: !!r.alternance, teletravail: !!r.teletravail, depuis_jours: r.depuis_jours || 7, flux_rss: r.flux_rss || "", sortie: "offres", si_erreur: "continuer" });
   const offres = (o.offres || []).map((x) => ({ ...x, recherche: r.id, statut: "nouvelle" }));
   const u = await Actions.dzf_table_upsert({ table: "offres_emploi", liste: offres, cle: "ref", sortie: "b" });
   nouvelles += (u.b && u.b.ajoutes) || 0;
-  await R.updateRow({ derniere_synchro: new Date(), etat: o.offres_erreur ? String(o.offres_erreur).slice(0, 200) : "ok" }, r.id, undefined, true);
+  const bilan = (o.offres_sources || []).filter((x) => !x.ignoree).map((x) => x.source + (x.ok ? " " + x.offres : " ✗")).join(" · ");
+  await R.updateRow({ derniere_synchro: new Date(), etat: o.offres_erreur ? String(o.offres_erreur).slice(0, 200) : (bilan || "aucune source").slice(0, 300) }, r.id, undefined, true);
 }
 return nouvelles;`;
 
@@ -30,23 +32,26 @@ module.exports = {
   label: "Emploi",
   icon: "fas fa-user-tie",
   group: "Travail",
-  description: "Offres d'emploi en France (API France Travail, gratuite) selon tes recherches enregistrées, tri rapide (intéressante / écarter / postuler) et suivi des candidatures avec relance automatique.",
+  description: "Offres d'emploi en France et en télétravail, cherchées dans plusieurs sources (France Travail, Adzuna, Jooble, Arbeitnow, Remotive, Jobicy, Himalayas, RemoteOK, flux RSS) selon tes recherches enregistrées, tri rapide (intéressante / écarter / postuler) et suivi des candidatures avec relance automatique.",
   depends: [],
-  setup: "<p>Crée une application gratuite sur <a href=\"https://francetravail.io\" target=\"_blank\" rel=\"noopener\">francetravail.io</a> (API « Offres d'emploi v2 »), puis colle ses deux clés dans <a href=\"/dysizz-me/reglages/emploi\">Régler Emploi</a>. Tes recherches se règlent ensuite dans la page Emploi.</p>",
+  setup: "<p>Sans rien régler, les sources sans clé marchent déjà (Arbeitnow, Remotive, Jobicy, Himalayas, RemoteOK). Pour plus d'offres françaises, ajoute des clés gratuites dans <a href=\"/dysizz-me/reglages/emploi\">Régler Emploi</a> : France Travail, Adzuna, Jooble.</p>",
   settings: {
-    intro: "Les offres viennent de l'API officielle de France Travail (gratuite). 1) Crée un compte sur <a href=\"https://francetravail.io\" target=\"_blank\" rel=\"noopener\">francetravail.io</a>. 2) « Créer une application », coche l'API <b>Offres d'emploi v2</b>. 3) Copie ici l'identifiant et la clé secrète.",
+    intro: "Les sources <b>sans clé</b> marchent déjà : Arbeitnow (Europe), Remotive, Jobicy, Himalayas, RemoteOK (télétravail). Pour beaucoup plus d'offres en France, ajoute une ou plusieurs <b>clés gratuites</b> :<ul><li><a href=\"https://francetravail.io\" target=\"_blank\" rel=\"noopener\">francetravail.io</a> → créer une application, cocher « Offres d'emploi v2 ».</li><li><a href=\"https://developer.adzuna.com\" target=\"_blank\" rel=\"noopener\">developer.adzuna.com</a> → s'inscrire, copier App ID et App Key.</li><li><a href=\"https://fr.jooble.org/api/about\" target=\"_blank\" rel=\"noopener\">jooble.org/api</a> → demander une clé.</li></ul>",
     fields: [
-      { name: "client_id", label: "Identifiant client", type: "password", secret: "FT_CLIENT_ID", required: true },
-      { name: "client_secret", label: "Clé secrète", type: "password", secret: "FT_CLIENT_SECRET", required: true },
+      { name: "ft_id", label: "France Travail · identifiant client", type: "password", secret: "FT_CLIENT_ID" },
+      { name: "ft_secret", label: "France Travail · clé secrète", type: "password", secret: "FT_CLIENT_SECRET" },
+      { name: "adzuna_id", label: "Adzuna · App ID", type: "password", secret: "ADZUNA_APP_ID" },
+      { name: "adzuna_key", label: "Adzuna · App Key", type: "password", secret: "ADZUNA_APP_KEY" },
+      { name: "jooble_key", label: "Jooble · clé", type: "password", secret: "JOOBLE_KEY" },
     ],
-    apply: [{ trigger: "emplois_releve", step: "configure", set: { condition: "true" } }],
+    apply: [],
     test: {
-      action: "dzf_france_travail",
-      config: () => ({ mots_cles: "data", depuis_jours: 7 }),
-      ok: (r) => `Connexion réussie. ${Array.isArray(r) ? r.length : 0} offre(s) « data » cette semaine.`,
-      explain: (m) => (/401|invalid_client|unauthorized/i.test(m) ? "France Travail refuse les clés : recopie-les (et vérifie que l'API Offres d'emploi v2 est cochée)." : ""),
+      action: "dzf_emplois",
+      config: () => ({ sources: "france_travail,adzuna,jooble,arbeitnow,remotive,jobicy,himalayas,remoteok", mots_cles: "data,devops", depuis_jours: 7 }),
+      okFull: true,
+      ok: (r) => { const s = (r && r.r_sources) || []; return `${((r && r.r) || []).length} offre(s) cette semaine. ${s.map((x) => `${x.source} : ${x.ok ? x.offres : x.ignoree ? "pas de clé" : "erreur (" + x.erreur + ")"}`).join(" · ")}`; },
     },
-    after: "Règle maintenant tes recherches dans la page Emploi.",
+    after: "Règle maintenant tes recherches dans la page Emploi (mots-clés, lieu, sources).",
   },
   tables: [
     {
@@ -55,6 +60,8 @@ module.exports = {
         K.s("nom", "Nom", { required: true }), K.s("mots_cles", "Mots-clés", { description: "Séparés par des virgules, ex. devops,kubernetes" }),
         K.s("departement", "Département(s)", { description: "Ex. 75 ou 75,92,93 — vide = toute la France" }), K.s("commune", "Code commune INSEE"),
         K.int("rayon_km", "Rayon (km) autour de la commune"), K.s("contrat", "Contrat", { description: "CDI, CDD, MIS (intérim)… vide = tous" }),
+        K.s("sources", "Sources", { description: "france_travail, adzuna, jooble, arbeitnow, remotive, jobicy, himalayas, remoteok, rss — vide = toutes", default: "france_travail,adzuna,jooble,arbeitnow,remotive,jobicy,himalayas,remoteok" }),
+        K.s("lieu", "Ville ou région (Adzuna, Jooble)"), K.s("flux_rss", "Flux RSS d'offres (source rss)"),
         K.bool("alternance", "Alternance seulement"), K.bool("teletravail", "Télétravail"), K.int("depuis_jours", "Publiées depuis (jours)", { default: 7 }),
         K.bool("actif", "Active", { default: true }), K.date("derniere_synchro", "Dernière recherche"), K.s("etat", "État"),
       ],
@@ -65,7 +72,7 @@ module.exports = {
         K.s("ref", "Référence", { unique: true }), K.s("titre", "Poste"), K.s("entreprise", "Entreprise"), K.s("lieu", "Lieu"), K.s("contrat", "Contrat"),
         K.s("salaire", "Salaire"), K.s("experience", "Expérience"), K.date("date", "Publiée le"), K.s("url", "Lien"), K.s("description", "Description"),
         K.key("recherche", "Recherche", "emploi_recherches", "nom"), K.opts("statut", "Statut", ["nouvelle", "intéressante", "postulé", "écartée"]),
-        K.s("source", "Source"), K.s("note", "Note"),
+        K.s("source", "Source"), K.s("logo", "Logo"), K.bool("teletravail", "Télétravail"), K.s("note", "Note"),
       ],
     },
     {
@@ -79,9 +86,10 @@ module.exports = {
   ],
   views: [
     K.show("offre_carte", "offres_emploi", K.box("`dzv-tile dzv-offre dzv-o-${String(statut || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\s+/g, '-')}`", K.O({ clsFormula: true, id: "`off-${id}`" }),
-      K.meta(K.field("entreprise", "as_text"), K.field("lieu", "as_text"), K.dateFr("date")),
+      K.box("dzv-offre-top", K.formula("logo && /^https?:/.test(logo) ? '<img class=\"dzv-offre-logo\" loading=\"lazy\" referrerpolicy=\"no-referrer\" alt=\"\" src=\"' + String(logo).replace(/\"/g, '%22') + '\">' : '<span class=\"dzv-offre-logo dzv-noimg\">' + String(entreprise || '?').trim().charAt(0).replace(/[<>&]/g, '?') + '</span>'", { html: true, block: false }),
+        K.meta(K.field("entreprise", "as_text"), K.field("lieu", "as_text"), K.dateFr("date"))),
       K.box("dzv-tile-title", K.O({ url: "`javascript:ajax_modal('/view/offre_lecture?id=${id}')`", urlFormula: true }), K.field("titre", "as_text")),
-      K.meta(K.field("contrat", "as_text", { cls: "dzv-pill" }), K.field("salaire", "as_text")),
+      K.meta(K.field("source", "as_text"), K.field("contrat", "as_text"), K.field("salaire", "as_text")),
       K.box("dzv-tile-actions",
         setStatut("Intéressante", "intéressante", "fas fa-heart"), setStatut("Écarter", "écartée", "fas fa-times"),
         K.jsBtn("Postuler", POSTULER, { icon: "fas fa-paper-plane", style: "btn-outline-primary" }), K.link("'Voir'", "url", { cls: "btn btn-sm btn-link" }))), { description: "Carte d'une offre" }),
@@ -90,7 +98,7 @@ module.exports = {
         K.box("dzv-tile-actions", K.jsBtn("Postuler", POSTULER, { icon: "fas fa-paper-plane", style: "btn-primary" }), K.link("'Ouvrir l\\'offre'", "url", { cls: "btn btn-sm btn-outline-secondary" }))),
       K.field("description", "as_text", { cls: "dzv-mail-body", block: true })), { title: "Offre", width: 860 }),
     K.feed("offres_fil", "offres_emploi", "offre_carte", { include: 'statut != "écartée" && statut != "postulé"', order: "date", desc: true, limit: 30, md: 2, lg: 3 }),
-    K.edit("recherche_modifier", "emploi_recherches", [["nom", "Nom"], ["mots_cles", "Mots-clés"], ["departement", "Département(s)"], ["contrat", "Contrat (CDI, CDD…)"], ["commune", "Code commune INSEE"], ["rayon_km", "Rayon (km)"], ["depuis_jours", "Publiées depuis (jours)"], ["alternance", "Alternance seulement"], ["teletravail", "Télétravail"], ["actif", "Active"]], { delete: true, title: "Recherche", width: 620 }),
+    K.edit("recherche_modifier", "emploi_recherches", [["nom", "Nom"], ["mots_cles", "Mots-clés"], ["sources", "Sources"], ["departement", "Département(s) (France Travail)"], ["lieu", "Ville ou région (Adzuna, Jooble)"], ["flux_rss", "Flux RSS d'offres"], ["contrat", "Contrat (CDI, CDD…)"], ["commune", "Code commune INSEE"], ["rayon_km", "Rayon (km)"], ["depuis_jours", "Publiées depuis (jours)"], ["alternance", "Alternance seulement"], ["teletravail", "Télétravail"], ["actif", "Active"]], { delete: true, title: "Recherche", width: 620 }),
     K.list("recherches_liste", "emploi_recherches", [["Recherche", K.field("nom", "as_text")], ["Mots-clés", K.field("mots_cles", "as_text")], ["Lieu", K.field("departement", "as_text")], ["Alternance", K.field("alternance", "show")], ["État", K.field("etat", "as_text", { cls: "dzv-pill" })], ["", K.jsBtn("Chercher", "// Lance tout de suite le workflow emplois_releve.\nawait Trigger.findOne({ name: \"emplois_releve\" }).runWithoutRow({ user });\nreturn { notify: \"Recherche lancée\", reload_page: true };", { icon: "fas fa-search", style: "btn-outline-secondary" })]],
       { order: "nom", desc: false, rowClick: "`/view/recherche_modifier?id=${id}`" }),
     K.edit("candidature_modifier", "candidatures", [["entreprise", "Entreprise"], ["poste", "Poste"], ["statut", "Statut"], ["lien", "Lien de l'offre"], ["envoyee_le", "Envoyée le", "editDay"], ["relance_le", "Relancer le", "editDay"], ["contact", "Contact"], ["notes", "Notes", "textarea"]], { delete: true, title: "Candidature", width: 620 }),
@@ -101,7 +109,6 @@ module.exports = {
   ],
   triggers: [
     K.wf("emplois_releve", "Hourly", null, "Cherche les nouvelles offres pour tes recherches (toutes les heures)", [
-      K.st("configure", "dzf_verifier", { condition: "!!(process.env.FT_CLIENT_ID && process.env.FT_CLIENT_SECRET)", si_faux: "renvoyer faux", sortie: "configure" }, { next_step: 'configure ? "chercher" : ""' }),
       K.st("chercher", "dzf_code", { code: CHERCHER, sortie: "nouvelles", delai_max: 300 }),
       K.st("ancien", "dzf_dates", { operation: "ajouter des jours", jours: -45, sortie: "limite" }),
       K.st("menage", "dzf_table_supprimer", { table: "offres_emploi", filtre: K.J({ statut: { in: ["nouvelle", "écartée"] }, date: { lt: "{{limite}}" } }), sortie: "supprimees" }),

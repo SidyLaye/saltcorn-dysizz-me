@@ -1,5 +1,6 @@
 "use strict";
 const K = require("./_kit");
+const { IMG_FML } = require("./veille");
 
 const site = (nom, url, theme) => ({ nom, type: "site", url, theme, actif: true, etat: "", erreur: "" });
 
@@ -12,9 +13,9 @@ module.exports = {
   depends: ["veille"],
   tables: [],
   views: [
-    K.show("actu_ligne", "veille_articles", K.box("`dzv-line${lu ? ' dzv-read' : ''}`", K.O({ clsFormula: true, id: "`art-${id}`" }),
-      K.box("dzv-line-src", K.join("source.nom", "as_text")),
-      K.box("", K.link("titre", "url"), K.box("dzv-mail-ext", K.dateFr("date", { time: true })))), { description: "Une ligne d'actualité" }),
+    K.show("actu_ligne", "veille_articles", K.box("`dzv-line dzv-line-img${lu ? ' dzv-read' : ''}`", K.O({ clsFormula: true, id: "`art-${id}`" }),
+      K.formula(IMG_FML("dzv-line-thumb"), { html: true }),
+      K.box("", K.box("dzv-line-src", K.join("source.nom", "as_text")), K.link("titre", "url", { cls: "dzv-line-title" }), K.box("dzv-mail-ext", K.dateFr("date", { time: true })))), { description: "Une ligne d'actualité avec son image" }),
     K.feed("actus_france", "veille_articles", "actu_ligne", { include: 'theme == "actus france"', order: "date", desc: true, limit: 25, md: 1, lg: 1 }),
     K.feed("actus_senegal", "veille_articles", "actu_ligne", { include: 'theme == "actus sénégal"', order: "date", desc: true, limit: 25, md: 1, lg: 1 }),
   ],

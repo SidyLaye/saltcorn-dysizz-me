@@ -151,7 +151,12 @@ const installModule = async (mod, allMods, { reset = false } = {}) => {
     tb = Table.findOne({ name: t.name });
     const have = new Set(tb.getFields().map((f) => f.name));
     for (const f of t.fields) {
-      if (have.has(f.name)) continue;
+      if (have.has(f.name)) {
+        /* un champ qui n'est plus « unique » dans une nouvelle version : on retire la contrainte */
+        const exf = tb.getFields().find((x) => x.name === f.name);
+        if (f.is_unique === false && exf && exf.is_unique) { try { await exf.update({ is_unique: false }); log.push(`champ ${t.name}.${f.name} : plus unique`); } catch (e) { log.push(`champ ${t.name}.${f.name} : ${e.message}`); } }
+        continue;
+      }
       await Field.create({ table: tb, ...fieldSpec(f) });
       log.push(`champ ${t.name}.${f.name} ajouté`);
     }
@@ -198,18 +203,22 @@ const installModule = async (mod, allMods, { reset = false } = {}) => {
     const ex = Trigger.findOne({ name: wf.name });
     const def = { name: wf.name, description: wf.description || "", action: "Workflow", when_trigger: wf.when, table_id: tb ? tb.id : null, configuration: {}, min_role: 1 };
     const want = stepsOf(wf);
+    /* l'empreinte gardée est celle des étapes vraiment écrites (avec tes réglages conservés),
+       pour qu'une prochaine mise à jour sache si tu as modifié le workflow depuis */
     if (!ex) {
       const created = await Trigger.create(def);
+      const tid = created.id || (Trigger.findOne({ name: wf.name }) || {}).id;
       await writeSteps(created, want, []);
       log.push(`workflow ${wf.name} créé (${want.length} étapes)`);
+      my["t:" + wf.name] = hash((await readSteps(tid)).map(norm));
     } else {
       const cur = await readSteps(ex.id);
-      if (reset || !my["t:" + wf.name] || hash(cur.map(norm)) === my["t:" + wf.name]) {
+      if (reset || !my["t:" + wf.name] || hash(cur.map(norm)) === my["t:" + wf.name] || hash(cur.map(norm)) === hash(want.map(norm))) {
         await Trigger.update(ex.id, { ...def, when_trigger: reset ? wf.when : ex.when_trigger });
         await writeSteps(ex, want, cur, wf.keep || {});
+        my["t:" + wf.name] = hash((await readSteps(ex.id)).map(norm));
       } else log.push(`workflow ${wf.name} gardé (tu l'as modifié)`);
     }
-    my["t:" + wf.name] = hash(want.map(norm));
   }
   await state.refresh_triggers?.(true);
 
@@ -218,9 +227,10 @@ const installModule = async (mod, allMods, { reset = false } = {}) => {
   const mods = allMods.filter((m) => installed.has(m.key));
   for (const p of mod.pages || []) {
     const ex = Page.findOne({ name: p.name });
-    const layout = shellLayout(mods, p, contentOf(p, installed));
+    /* shell: false = page sans menu de Me (ex. page de statut publique) */
+    const layout = p.shell === false ? { above: contentOf(p, installed) } : shellLayout(mods, p, contentOf(p, installed));
     if (!ex) {
-      await Page.create({ name: p.name, title: p.title, description: p.description || "", min_role: 1, layout, fixed_states: {}, attributes: { no_menu: true, request_fluid_layout: true } });
+      await Page.create({ name: p.name, title: p.title, description: p.description || "", min_role: p.min_role || 1, layout, fixed_states: {}, attributes: { no_menu: p.shell !== false, request_fluid_layout: true } });
       log.push(`page ${p.name} créée`);
     } else if (reset || !my["p:" + p.name] || hash(stripShell(ex.layout)) === my["p:" + p.name]) {
       await Page.update(ex.id, { layout, title: p.title, description: p.description || "", attributes: { ...(ex.attributes || {}), no_menu: true, request_fluid_layout: true } });
@@ -279,7 +289,7 @@ const refreshAllShells = async (allMods) => {
   const mods = allMods.filter((m) => installed.has(m.key));
   for (const m of mods) for (const p of m.pages || []) {
     const ex = Page.findOne({ name: p.name });
-    if (!ex) continue;
+    if (!ex || p.shell === false) continue;
     const my = stamps[m.key] || {};
     if (typeof p.content === "function" && (!my["p:" + p.name] || hash(stripShell(ex.layout)) === my["p:" + p.name])) {
       const layout = shellLayout(mods, p, contentOf(p, installed));
@@ -327,4 +337,15 @@ const resolveRefs = async (row) => {
   return out;
 };
 
-module.exports = { missingDeps, installModule, uninstallModule, moduleStatus, getCfg, saveCfg, refreshAllShells };
+/* après une modification faite par Me lui-même (ex. page Régler) : ce n'est pas « toi » qui as modifié */
+const restamp = async (modKey, triggerName) => {
+  const { Trigger } = M();
+  const t = Trigger.findOne({ name: triggerName });
+  if (!t) return;
+  const cfg = await getCfg();
+  const stamps = { ...(cfg.stamps || {}) };
+  stamps[modKey] = { ...(stamps[modKey] || {}), ["t:" + triggerName]: hash((await readSteps(t.id)).map(norm)) };
+  await saveCfg({ stamps });
+};
+
+module.exports = { restamp, missingDeps, installModule, uninstallModule, moduleStatus, getCfg, saveCfg, refreshAllShells };

@@ -11,6 +11,9 @@ return { eval_js: "var c=document.getElementById('art-" + row.id + "');if(c)c.cl
 const SRC = (s) => ({ ...s, actif: true, etat: "", erreur: "" });
 const site = (nom, url, theme) => SRC({ nom, type: "site", url, theme });
 
+/* image de l'article, ou une vignette de couleur avec l'initiale de la source quand il n'y en a pas */
+const THEME_ICON = { dev: "fa-code", cyber: "fa-shield-alt", ia: "fa-brain", devops: "fa-infinity", mlops: "fa-project-diagram", cloud: "fa-cloud", "réseau": "fa-network-wired", "systèmes": "fa-server", data: "fa-database", "tech fr": "fa-laptop-code", "actus france": "fa-newspaper", "actus sénégal": "fa-globe-africa" };
+const IMG_FML = (cls) => `(image && /^https?:/.test(image)) ? '<div class="${cls}"><img loading="lazy" referrerpolicy="no-referrer" alt="" src="' + String(image).replace(/"/g, '%22').replace(/</g, '%3C') + '" onerror="this.parentNode.classList.add(\\'dzv-noimg\\');this.remove()"></div>' : '<div class="${cls} dzv-noimg"><i class="fas ' + (${JSON.stringify(THEME_ICON)}[theme] || 'fa-rss') + '"></i></div>'`;
 const card = (extraTop = []) => K.box("`dzv-article${lu ? ' dzv-read' : ''}${favori ? ' dzv-fav' : ''}${plus_tard ? ' dzv-later' : ''}`", K.O({ clsFormula: true, id: "`art-${id}`" }),
   ...extraTop,
   K.box("dzv-article-in",
@@ -66,7 +69,7 @@ module.exports = {
     },
   ],
   views: [
-    K.show("article_carte", "veille_articles", card([K.image("image || ''", { cls: "dzv-article-img" })]), { description: "Carte d'un article" }),
+    K.show("article_carte", "veille_articles", card([K.formula(IMG_FML("dzv-article-img"), { html: true })]), { description: "Carte d'un article" }),
     K.feed("veille_fil", "veille_articles", "article_carte", { include: 'type == "article" && theme != "actus france" && theme != "actus sénégal"', order: "date", desc: true, limit: 30, md: 2, lg: 3 }),
     K.edit("source_modifier", "veille_sources", [["nom", "Nom"], ["type", "Type"], ["theme", "Thème"], ["url", "Adresse du flux (site)"], ["chaine", "Chaîne YouTube (@nom)"], ["actif", "Suivie"]], { delete: true, title: "Source", width: 620 }),
     K.list("sources_liste", "veille_sources", [
@@ -80,6 +83,7 @@ module.exports = {
       K.st("sources", "dzf_table_chercher", { table: "veille_sources", filtre: K.J({ actif: true }), limite: 500, sortie: "sources" }),
       K.st("lire", "dzf_rss", { sources: "{{sources}}", champs_source: "theme", max_par_source: 30, en_parallele: 4, delai_max: 240, sortie: "articles" }),
       K.st("nouveaux", "dzf_liste_dedoublonner", { liste: "{{articles}}", cle: "url", table: "veille_articles", sortie: "nouveaux" }),
+      K.st("images", "dzf_images_articles", { liste: "{{nouveaux}}", max: 40, en_parallele: 6, delai_s: 8, sortie: "nouveaux", si_erreur: "continuer", delai_max: 150 }, { only_if: "nouveaux.length > 0" }),
       K.st("maintenant", "dzf_dates", { operation: "maintenant", sortie: "maintenant" }),
       K.st("preparer", "dzf_liste_transformer", { liste: "{{nouveaux}}", modele: K.J({ source: "{{item.source}}", titre: "{{item.titre}}", url: "{{item.url}}", date: "{{item.date}}", resume: "{{item.resume}}", image: "{{item.image}}", auteur: "{{item.auteur}}", theme: "{{item.source_theme}}", type: "{{item.type}}", video_id: "{{item.video_id}}", lu: false, favori: false, plus_tard: false, ajoute_le: "{{maintenant}}" }), sortie: "lignes" }),
       K.st("ranger", "dzf_table_upsert", { table: "veille_articles", liste: "{{lignes}}", cle: "url", sans_declencheurs: true, sortie: "bilan" }),
@@ -137,3 +141,4 @@ module.exports = {
 module.exports.THEMES = THEMES;
 module.exports.card = card;
 module.exports.toggle = toggle;
+module.exports.IMG_FML = IMG_FML;

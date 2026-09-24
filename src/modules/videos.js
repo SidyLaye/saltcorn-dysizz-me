@@ -7,7 +7,7 @@ const yt = (nom, chaine, youtube_id, theme) => ({ nom, type: "youtube", chaine, 
 
 const VID = "String(video_id || '').replace(/[^\\w-]/g, '')";
 const THUMB = `'<span class="dzv-thumb"><img loading="lazy" alt="" src="https://i.ytimg.com/vi/' + ${VID} + '/mqdefault.jpg"></span>'`;
-const PLAYER = `'<div class="dzv-player"><iframe src="https://www.youtube-nocookie.com/embed/' + ${VID} + '?rel=0" title="Lecteur vidéo" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div>'`;
+const PLAYER = `'<div class="dzv-player"><iframe src="https://www.youtube-nocookie.com/embed/' + ${VID} + '?rel=0&playsinline=1" title="Lecteur vidéo" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" loading="lazy"></iframe></div><p class="dzv-player-alt"><a target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=' + ${VID} + '"><i class="fab fa-youtube"></i> Ouvrir sur YouTube</a></p>'`;
 
 module.exports = {
   key: "videos",

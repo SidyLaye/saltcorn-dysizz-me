@@ -10,11 +10,11 @@
 - [Santé](#sante) — Rendez-vous médicaux avec rappel la veille, traitements en cours, mesures (poids, tension, sommeil, pas…) et carnet des soignants.
 - [Documents](#documents) — Coffre de documents rangés par catégorie (identité, impôts, logement…), fichiers joints, dates d'expiration avec rappel et tâche de renouvellement automatique.
 - [Mails pro](#mails) — Ta boîte pro (OVH ou tout serveur IMAP) relevée toutes les 5 minutes, en lecture seule : non lus, importants, à traiter, règles automatiques, mail → tâche en un clic.
-- [Emploi](#emploi) — Offres d'emploi en France (API France Travail, gratuite) selon tes recherches enregistrées, tri rapide (intéressante / écarter / postuler) et suivi des candidatures avec relance automatique.
+- [Emploi](#emploi) — Offres d'emploi en France et en télétravail, cherchées dans plusieurs sources (France Travail, Adzuna, Jooble, Arbeitnow, Remotive, Jobicy, Himalayas, RemoteOK, flux RSS) selon tes recherches enregistrées, tri rapide (intéressante / écarter / postuler) et suivi des candidatures avec relance automatique.
 - [Veille tech](#veille) — Les nouveautés dev, cyber (dont alertes CERT-FR), IA, DevOps, MLOps, cloud, réseau et systèmes, lues toutes les heures depuis des flux RSS que tu choisis. Lu, favori, à lire plus tard.
 - [Vidéos](#videos) — Les dernières vidéos des chaînes YouTube dev, cyber, IA, DevOps/MLOps, réseau et systèmes que tu suis, regardées directement dans l'appli (sans pub de suivi, lecteur youtube-nocookie).
 - [Actus France & Sénégal](#actus) — Les titres du jour en France et au Sénégal côte à côte (franceinfo, Le Monde, France 24, Seneweb, Dakaractu, APS, Le Soleil, RFI Afrique…), mis à jour toutes les heures.
-- [Surveillance](#surveillance) — Tes sites et services surveillés toutes les 5 minutes : en ligne, lent ou en panne, temps de réponse en graphique, historique des incidents, certificats TLS qui expirent. Une seule alerte par incident, puis « rétabli ».
+- [Surveillance](#surveillance) — Tes sites, API, serveurs et domaines surveillés en profondeur : 13 types de sondes (site, scénario d'API, port, DNS et ses changements, certificat, expiration du domaine, contenu modifié, liste noire, mail, Prometheus, battement de tâches cron, note de sécurité A-F), incidents avec durée, disponibilité 24 h / 7 j / 30 j, page de statut publique, alertes sans spam par notification, ntfy ou Telegram.
 
 ---
 
@@ -715,11 +715,11 @@ if (maj.important && !row.lu)
 
 ## <a id="emploi"></a>Emploi
 
-Offres d'emploi en France (API France Travail, gratuite) selon tes recherches enregistrées, tri rapide (intéressante / écarter / postuler) et suivi des candidatures avec relance automatique.
+Offres d'emploi en France et en télétravail, cherchées dans plusieurs sources (France Travail, Adzuna, Jooble, Arbeitnow, Remotive, Jobicy, Himalayas, RemoteOK, flux RSS) selon tes recherches enregistrées, tri rapide (intéressante / écarter / postuler) et suivi des candidatures avec relance automatique.
 
 ### À régler
 
-Crée une application gratuite sur francetravail.io (API « Offres d'emploi v2 »), puis colle ses deux clés dans Régler Emploi. Tes recherches se règlent ensuite dans la page Emploi.
+Sans rien régler, les sources sans clé marchent déjà (Arbeitnow, Remotive, Jobicy, Himalayas, RemoteOK). Pour plus d'offres françaises, ajoute des clés gratuites dans Régler Emploi : France Travail, Adzuna, Jooble.
 
 ### Comment ça marche
 
@@ -742,6 +742,9 @@ Tes recherches enregistrées
 | `commune` Code commune INSEE | String |  |
 | `rayon_km` Rayon (km) autour de la commune | Integer |  |
 | `contrat` Contrat | String | CDI, CDD, MIS (intérim)… vide = tous |
+| `sources` Sources | String | france_travail, adzuna, jooble, arbeitnow, remotive, jobicy, himalayas, remoteok, rss — vide = toutes |
+| `lieu` Ville ou région (Adzuna, Jooble) | String |  |
+| `flux_rss` Flux RSS d'offres (source rss) | String |  |
 | `alternance` Alternance seulement | Bool |  |
 | `teletravail` Télétravail | Bool |  |
 | `depuis_jours` Publiées depuis (jours) | Integer |  |
@@ -768,6 +771,8 @@ Offres trouvées
 | `recherche` Recherche | Key to emploi_recherches |  |
 | `statut` Statut | String, obligatoire | choix : nouvelle, intéressante, postulé, écartée |
 | `source` Source | String |  |
+| `logo` Logo | String |  |
+| `teletravail` Télétravail | Bool |  |
 | `note` Note | String |  |
 
 ### Table `candidatures`
@@ -810,7 +815,6 @@ Cherche les nouvelles offres pour tes recherches (toutes les heures).
 
 | Étape | Bloc | Condition |
 |---|---|---|
-| configure | `dzf_verifier` |  suite : `configure ? "chercher" : ""` |
 | chercher | `dzf_code` |  |
 | ancien | `dzf_dates` |  |
 | menage | `dzf_table_supprimer` |  |
@@ -818,15 +822,17 @@ Cherche les nouvelles offres pour tes recherches (toutes les heures).
 Code de l'étape `chercher` :
 
 ```js
-// Pour chaque recherche active : bloc France Travail, puis rangement sans doublon.
+// Pour chaque recherche active : le bloc « Emploi : chercher dans plusieurs sources »,
+// puis rangement sans doublon. Chaque source en panne est notée dans l'état de la recherche.
 const R = Table.findOne({ name: "emploi_recherches" });
 let nouvelles = 0;
 for (const r of await R.getRows({ actif: true })) {
-  const o = await Actions.dzf_france_travail({ mots_cles: r.mots_cles || "", departement: r.departement || "", commune: r.commune || "", rayon_km: r.rayon_km || "", contrat: r.contrat || "", alternance: !!r.alternance, depuis_jours: r.depuis_jours || 7, sortie: "offres", si_erreur: "continuer" });
+  const o = await Actions.dzf_emplois({ sources: r.sources || "france_travail,adzuna,jooble,arbeitnow,remotive,jobicy,himalayas,remoteok", mots_cles: r.mots_cles || "", departement: r.departement || "", lieu: r.lieu || "", commune: r.commune || "", rayon_km: r.rayon_km || "", contrat: r.contrat || "", alternance: !!r.alternance, teletravail: !!r.teletravail, depuis_jours: r.depuis_jours || 7, flux_rss: r.flux_rss || "", sortie: "offres", si_erreur: "continuer" });
   const offres = (o.offres || []).map((x) => ({ ...x, recherche: r.id, statut: "nouvelle" }));
   const u = await Actions.dzf_table_upsert({ table: "offres_emploi", liste: offres, cle: "ref", sortie: "b" });
   nouvelles += (u.b && u.b.ajoutes) || 0;
-  await R.updateRow({ derniere_synchro: new Date(), etat: o.offres_erreur ? String(o.offres_erreur).slice(0, 200) : "ok" }, r.id, undefined, true);
+  const bilan = (o.offres_sources || []).filter((x) => !x.ignoree).map((x) => x.source + (x.ok ? " " + x.offres : " ✗")).join(" · ");
+  await R.updateRow({ derniere_synchro: new Date(), etat: o.offres_erreur ? String(o.offres_erreur).slice(0, 200) : (bilan || "aucune source").slice(0, 300) }, r.id, undefined, true);
 }
 return nouvelles;
 ```
@@ -934,6 +940,7 @@ Lit toutes les sources actives (sites et chaînes YouTube), toutes les heures.
 | sources | `dzf_table_chercher` |  |
 | lire | `dzf_rss` |  |
 | nouveaux | `dzf_liste_dedoublonner` |  |
+| images | `dzf_images_articles` | `nouveaux.length > 0` |
 | maintenant | `dzf_dates` |  |
 | preparer | `dzf_liste_transformer` |  |
 | ranger | `dzf_table_upsert` |  |
@@ -1009,7 +1016,7 @@ S'appuie sur : veille.
 
 | Vue | Type | Table | Rôle |
 |---|---|---|---|
-| `actu_ligne` | Show | veille_articles | Une ligne d'actualité |
+| `actu_ligne` | Show | veille_articles | Une ligne d'actualité avec son image |
 | `actus_france` | Feed | veille_articles |  |
 | `actus_senegal` | Feed | veille_articles |  |
 
@@ -1022,137 +1029,198 @@ S'appuie sur : veille.
 
 ## <a id="surveillance"></a>Surveillance
 
-Tes sites et services surveillés toutes les 5 minutes : en ligne, lent ou en panne, temps de réponse en graphique, historique des incidents, certificats TLS qui expirent. Une seule alerte par incident, puis « rétabli ».
+Tes sites, API, serveurs et domaines surveillés en profondeur : 13 types de sondes (site, scénario d'API, port, DNS et ses changements, certificat, expiration du domaine, contenu modifié, liste noire, mail, Prometheus, battement de tâches cron, note de sécurité A-F), incidents avec durée, disponibilité 24 h / 7 j / 30 j, page de statut publique, alertes sans spam par notification, ntfy ou Telegram.
 
 ### À régler
 
-Ajoute tes sites (adresse complète, ex. `https://monsite.fr`). Pour un service interne (base, SMTP…), le bloc « service joignable (TCP) » de dysizz-flow peut être ajouté au workflow.
+Ajoute des sondes dans la page Surveillance. Pour recevoir les alertes sur ton téléphone : Régler Surveillance (ntfy ou Telegram).
 
 ### Comment ça marche
 
 | Quand | Ce qui se passe |
 |---|---|
-| Toutes les 5 minutes | Le workflow « surveillance_verifier » : Verrou (une seule exécution à la fois) → Table : chercher les sites → Surveillance : site en ligne ? (en parallèle) → Code (ce qui a changé) → Table : ajouter ou mettre à jour → Table : ajouter (mesures, incidents) → Alerte (sans spam) → Notifier. |
-| Une seule alerte | Le bloc « Alerte (sans spam) » ne prévient qu'une fois par heure tant que la panne dure, puis une fois quand tout est rétabli. |
-| Le graphique | Vue « surveillance_temps » (DZ Graphique) : moyenne par heure des temps de la table surveillance_mesures, un trait par site. Le regroupement est fait par la base. |
-| Les certificats | Le workflow « surveillance_certificats » (chaque jour) lit le certificat TLS de chaque site en https, range le nombre de jours restants et prévient avant l'expiration. |
-| Le ménage | « surveillance_menage » (chaque semaine) garde 30 jours de mesures et 180 jours d'incidents, pour que les tables restent légères. |
+| Toutes les 5 minutes | Le workflow « surveillance_verifier » prend les sondes dues (chacune a son intervalle), appelle pour chacune le bon bloc dysizz-flow (site, scénario d'API, port, DNS, certificat, domaine, contenu, liste noire, mail, Prometheus, battement, note de sécurité), 6 à la fois. |
+| Incidents | Une panne ouvre un incident dans « surveillance_evenements » ; le retour à la normale le ferme avec sa durée. |
+| Une seule alerte | Le bloc « Alerte (sans spam) » par sonde : une alerte à la panne, un rappel toutes les heures au plus, puis « rétabli ». Envoyée en notification, et sur ntfy / Telegram si réglés. |
+| Disponibilité | « surveillance_dispo » calcule chaque heure le % de vérifications réussies sur 24 h, 7 j et 30 j ; la vue DZ Disponibilité dessine une barre par jour. |
+| Battement | Pour une tâche cron : crée une sonde de type battement, puis fais appeler par ta tâche l'adresse affichée (curl). Sans nouvelles depuis « seuil » minutes : panne. |
+| Page de statut | /page/statut montre les sondes marquées « page de statut ». Elle devient publique si tu le coches dans Régler Surveillance. |
 
 ### Table `surveillance_sites`
 
-Les sites et services surveillés
+Les sondes : sites, API, serveurs, domaines…
 
 | Champ | Type | Détail |
 |---|---|---|
 | `nom` Nom | String, obligatoire |  |
-| `url` Adresse | String, obligatoire |  |
+| `type` Type de sonde | String, obligatoire | choix : http, api, tcp, dns, dns_change, tls, domaine, contenu, liste_noire, mail, prometheus, battement, securite |
+| `url` Cible (adresse, domaine ou IP) | String, obligatoire |  |
+| `port` Port | Integer |  |
+| `attendu` Attendu / réglage | String |  |
+| `seuil` Seuil | Integer |  |
+| `intervalle_min` Toutes les (minutes) | Integer |  |
+| `groupe` Groupe | String |  |
+| `publique` Sur la page de statut | Bool |  |
 | `actif` Surveillé | Bool |  |
 | `etat` État | String |  |
-| `ms` Temps de réponse (ms) | Integer |  |
+| `ms` Temps / valeur | Integer |  |
 | `code_http` Code HTTP | Integer |  |
 | `raison` Raison | String |  |
 | `verifie_le` Vérifié le | Date |  |
+| `dernier_ok` Dernier OK | Date |  |
+| `jeton` Jeton de battement | String |  |
 | `tls_jours` Certificat : jours restants | Integer |  |
 | `tls_expire_le` Certificat : expire le | Date |  |
 | `tls_alerte_jours` Prévenir (jours avant l'expiration du certificat) | Integer |  |
+| `note_secu` Note de sécurité | String |  |
+| `score` Score de sécurité | Integer |  |
+| `dispo_24h` Dispo 24 h (%) | Float |  |
+| `dispo_7j` Dispo 7 j (%) | Float |  |
+| `dispo_30j` Dispo 30 j (%) | Float |  |
+| `details` Détails (JSON) | String |  |
 | `note` Note | String |  |
 
 ### Table `surveillance_mesures`
 
-Temps de réponse (gardés 30 jours)
+Chaque vérification (gardées 90 jours)
 
 | Champ | Type | Détail |
 |---|---|---|
 | `quand` Quand | Date |  |
-| `site` Site | String |  |
+| `site` Sonde | String |  |
+| `sonde` Id de la sonde | Integer |  |
 | `ms` Temps (ms) | Integer |  |
+| `ok` OK | Bool |  |
 
 ### Table `surveillance_evenements`
 
-Changements d'état (incidents, retours à la normale)
+Incidents : début, fin, durée
 
 | Champ | Type | Détail |
 |---|---|---|
 | `quand` Quand | Date |  |
-| `site` Site | String |  |
+| `site` Sonde | String |  |
+| `sonde` Id de la sonde | Integer |  |
 | `etat` État | String |  |
 | `message` Message | String |  |
+| `debut` Début | Date |  |
+| `fin` Fin | Date |  |
+| `duree_min` Durée (min) | Integer |  |
+| `ouvert` En cours | Bool |  |
 
 ### Vues
 
 | Vue | Type | Table | Rôle |
 |---|---|---|---|
 | `site_modifier` | Edit | surveillance_sites | Formulaire surveillance_sites |
-| `surveillance_statut` | DZ Statut | surveillance_sites | État de chaque site |
-| `surveillance_temps` | DZ Graphique | surveillance_mesures | Temps de réponse moyen par heure, un trait par site |
+| `sonde_fiche` | Show | surveillance_sites |  |
+| `surveillance_statut` | DZ Statut | surveillance_sites | État de chaque sonde |
+| `surveillance_dispo` | DZ Disponibilité | surveillance_mesures | Disponibilité jour par jour sur 30 jours |
+| `statut_public` | DZ Disponibilité | surveillance_mesures | Page de statut : 90 jours |
+| `surveillance_temps` | DZ Graphique | surveillance_mesures | Temps de réponse moyen par heure |
 | `surveillance_journal` | DZ Journal | surveillance_evenements | Incidents et retours à la normale |
-| `sites_liste` | List | surveillance_sites | Tous les sites |
+| `sites_liste` | List | surveillance_sites | Toutes les sondes |
 
 ### Pages
 
 - `/page/surveillance` — Surveillance
+- `/page/statut` — Statut des services
 
 ### Workflows (blocs dysizz-flow)
 
 #### `surveillance_verifier` — Often
 
-Toutes les ~5 min : appelle chaque site, note l'état et le temps, garde l'historique, prévient une fois par incident.
+Toutes les ~5 min : vérifie les sondes dues, note mesures et incidents, prévient une fois par incident (notification, ntfy, Telegram).
 
 | Étape | Bloc | Condition |
 |---|---|---|
-| verrou | `dzf_verrou` |  suite : `verrou ? "sites" : ""` |
-| sites | `dzf_table_chercher` |  |
-| appeler | `dzf_ping_http` | `sites.length > 0` |
-| preparer | `dzf_code` | `sites.length > 0` |
-| ranger | `dzf_table_upsert` | `sites.length > 0` |
-| mesures | `dzf_table_ajouter` | `sites.length > 0` |
-| evenements | `dzf_table_ajouter` | `sites.length > 0 && p.evenements.length > 0` |
-| alerte | `dzf_alerte` | `sites.length > 0` |
-| prevenir | `dzf_notifier` | `sites.length > 0 && alerte.envoyer` |
+| verrou | `dzf_verrou` |  suite : `verrou ? "verifier" : ""` |
+| verifier | `dzf_code` |  |
+| prevenir | `dzf_notifier` | `v && v.alertes.length > 0` |
+| ntfy | `dzf_ntfy` | `v && v.alertes.length > 0` |
+| telegram | `dzf_telegram` | `v && v.alertes.length > 0` |
 | liberer | `dzf_verrou` |  |
 
-Code de l'étape `preparer` :
+Code de l'étape `verifier` :
 
 ```js
-// row.sites = les sites avant l'appel, row.resultats = l'appel (même ordre)
-const avant = new Map((row.sites || []).map((s) => [s.id, s]));
-const quand = new Date().toISOString();
-const maj = [], mesures = [], evenements = [];
-for (const r of row.resultats || []) {
-  const s = avant.get(r.id) || {};
-  maj.push({ id: r.id, etat: r.etat, ms: r.ms, code_http: r.statut, raison: r.raison || "", verifie_le: quand });
-  mesures.push({ quand, site: s.nom || r.url, ms: r.ms });
-  if (s.etat !== r.etat && (s.etat || r.etat !== "ok"))
-    evenements.push({ quand, site: s.nom || r.url, etat: r.etat, message: s.etat ? (r.etat === "ok" ? "de nouveau en ligne" : r.etat === "lent" ? "répond lentement" + (r.raison ? " : " + r.raison : "") : "en panne" + (r.raison ? " : " + r.raison : "")) : "première vérification : " + r.etat });
+// Sondes dues (selon leur intervalle), vérifiées 6 par 6 avec le bon bloc dysizz-flow.
+const S = Table.findOne({ name: "surveillance_sites" });
+const M = Table.findOne({ name: "surveillance_mesures" });
+const E = Table.findOne({ name: "surveillance_evenements" });
+const now = Date.now();
+const sondes = (await S.getRows({ actif: true })).filter((s) => !s.verifie_le || now - new Date(s.verifie_le) >= Math.max(1, s.intervalle_min || 5) * 60e3 - 45e3);
+const host = (u) => String(u || "").replace(/^https?:\/\//, "").replace(/[\/:].*$/, "");
+const one = async (s) => {
+  const t0 = Date.now();
+  const r = async (bloc, cfg) => { const o = await Actions[bloc]({ ...cfg, sortie: "r", si_erreur: "continuer" }); if (o.r_erreur) throw new Error(o.r_erreur); return o.r; };
+  try {
+    switch (s.type || "http") {
+      case "http": { const x = await r("dzf_ping_http", { cibles: s.url, contient: s.attendu || "", lent_ms: s.seuil || 2000, delai_s: 15 }); return { etat: x.etat, ms: x.ms, code_http: x.statut, raison: x.raison }; }
+      case "api": { const x = await r("dzf_api_scenario", { etapes: s.attendu || "[]" }); return { etat: x.etat, ms: x.ms, raison: x.raison, details: x.etapes }; }
+      case "tcp": { const x = await r("dzf_port_ouvert", { hote: host(s.url), port: s.port || 443, delai_ms: 5000 }); return { etat: x.ok ? (s.seuil && x.ms > s.seuil ? "lent" : "ok") : "panne", ms: x.ms, raison: x.raison }; }
+      case "dns": { const x = await r("dzf_dns", { domaine: host(s.url), type: "A", attendu: s.attendu || "" }); return { etat: x.ok ? "ok" : "panne", raison: x.ok ? "" : "attendu " + s.attendu + ", trouvé " + x.valeurs.join(", "), details: x.valeurs }; }
+      case "dns_change": { const x = await r("dzf_dns_changement", { domaine: host(s.url) }); return { etat: x.etat, raison: x.raison, details: x.enregistrements }; }
+      case "tls": { const x = await r("dzf_certificat_tls", { hotes: host(s.url), port: s.port || 443 }); const j = x.jours_restants; return { etat: j === null ? "panne" : j < 0 || x.valide === false ? "panne" : j <= (s.seuil || 14) ? "lent" : "ok", raison: j === null ? x.erreur : j + " jour(s) restant(s)" + (x.valide === false ? " · invalide" : ""), tls_jours: j, tls_expire_le: x.fin || null }; }
+      case "domaine": { const x = await r("dzf_domaine_expiration", { domaine: host(s.url), alerte_jours: s.seuil || 30 }); return { etat: x.etat === "inconnu" ? "lent" : x.etat, raison: x.jours_restants === null ? "date inconnue" : "expire dans " + x.jours_restants + " j (" + (x.registrar || "?") + ")" }; }
+      case "contenu": { const x = await r("dzf_contenu_change", { url: s.url, debut: s.attendu || "" }); return { etat: x.etat, raison: x.change ? "modifiée : " + x.apercu : x.premiere_fois ? "première lecture" : "" }; }
+      case "liste_noire": { const x = await r("dzf_liste_noire", { cible: host(s.url) }); return { etat: x.etat, raison: x.raison, details: x.details }; }
+      case "mail": { const x = await r("dzf_dns_mail", { domaine: host(s.url) }); return { etat: x.ok ? "ok" : "lent", raison: (x.conseils || []).join(" ; "), details: { spf: x.spf, dmarc: x.dmarc, mx: x.mx } }; }
+      case "prometheus": { const x = await r("dzf_prometheus", { url: s.url, requete: s.attendu || "up", max: s.seuil === null || s.seuil === undefined ? "" : s.seuil }); return { etat: x.etat, raison: x.raison || "valeur " + x.valeur, ms: Math.round(x.valeur) }; }
+      case "battement": { const age = s.dernier_ok ? (now - new Date(s.dernier_ok)) / 60e3 : null; return { etat: age === null ? "lent" : age > (s.seuil || 60) ? "panne" : "ok", raison: age === null ? "jamais reçu" : "dernier signal il y a " + Math.round(age) + " min", keep_ok: true }; }
+      case "securite": { const x = await r("dzf_note_securite", { url: s.url }); return { etat: x.etat, raison: "note " + x.note + " (" + x.score + "/100)" + (x.a_corriger.length ? " · " + x.a_corriger.slice(0, 2).join(" ; ") : ""), note_secu: x.note, score: x.score, details: x.a_corriger }; }
+      default: return { etat: "panne", raison: "type inconnu : " + s.type };
+    }
+  } catch (e) { return { etat: "panne", raison: String(e.message || e).slice(0, 300), ms: Date.now() - t0 }; }
+};
+const alertes = [];
+for (let i = 0; i < sondes.length; i += 6) {
+  await Promise.all(sondes.slice(i, i + 6).map(async (s) => {
+    const x = await one(s);
+    const quand = new Date();
+    const maj = { etat: x.etat, raison: String(x.raison || "").slice(0, 500), verifie_le: quand };
+    if (x.ms !== undefined) maj.ms = x.ms;
+    if (x.code_http !== undefined) maj.code_http = x.code_http;
+    for (const k of ["tls_jours", "tls_expire_le", "note_secu", "score"]) if (x[k] !== undefined) maj[k] = x[k];
+    if (x.details !== undefined) maj.details = JSON.stringify(x.details).slice(0, 8000);
+    if (x.etat === "ok" && !x.keep_ok) maj.dernier_ok = quand;
+    if (s.type === "battement" && !s.jeton) maj.jeton = [...Array(24)].map(() => "abcdefghijkmnpqrstuvwxyz23456789"[Math.floor(Math.random() * 32)]).join("");
+    await S.updateRow(maj, s.id, undefined, true);
+    await M.insertRow({ quand, site: s.nom, sonde: s.id, ms: x.ms ?? null, ok: x.etat !== "panne" }, undefined, undefined, true);
+    /* incident : ouvert à la panne, fermé au retour */
+    const ouvert = await E.getRow({ sonde: s.id, ouvert: true });
+    if (x.etat === "panne" && !ouvert) await E.insertRow({ quand, debut: quand, site: s.nom, sonde: s.id, etat: "panne", ouvert: true, message: "En panne : " + (x.raison || "?") });
+    if (x.etat !== "panne" && ouvert) await E.updateRow({ ouvert: false, fin: quand, duree_min: Math.round((quand - new Date(ouvert.debut || ouvert.quand)) / 60e3), etat: "ok", message: ouvert.message + " → rétabli" }, ouvert.id);
+    if (x.etat === "lent" && s.etat !== "lent" && s.etat) await E.insertRow({ quand, debut: quand, fin: quand, site: s.nom, sonde: s.id, etat: "lent", ouvert: false, message: "Attention : " + (x.raison || "") });
+    const a = await Actions.dzf_alerte({ cle: "sonde-" + s.id, probleme: x.etat === "panne", silence_min: 60, sortie: "a" });
+    if (a.a && a.a.envoyer) alertes.push((a.a.etat === "rétabli" ? "✅ " : "🔴 ") + s.nom + " : " + a.a.etat + (x.raison && a.a.etat !== "rétabli" ? " (" + x.raison + ")" : a.a.duree_min ? " après " + a.a.duree_min + " min" : ""));
+  }));
 }
-const pannes = (row.resultats || []).filter((r) => r.etat === "panne");
-return { maj, mesures, evenements, pannes, texte: pannes.map((p) => "- " + (avant.get(p.id) || {}).nom + " (" + (p.raison || "?") + ")").join("\n") };
+return { verifiees: sondes.length, alertes, texte: alertes.join("\n") };
 ```
 
-#### `surveillance_certificats` — Daily
+#### `surveillance_dispo` — Hourly
 
-Chaque jour : vérifie le certificat TLS de chaque site en https et prévient avant qu'il expire.
+Chaque heure : disponibilité de chaque sonde sur 24 h, 7 j et 30 j.
 
 | Étape | Bloc | Condition |
 |---|---|---|
-| sites | `dzf_table_chercher` |  |
-| tls | `dzf_certificat_tls` | `sites.length > 0` |
-| preparer | `dzf_code` | `sites.length > 0 && tls` |
-| ranger | `dzf_table_upsert` | `sites.length > 0 && tls` |
-| prevenir | `dzf_notifier` | `sites.length > 0 && tls && c.bientot.length > 0` |
+| calcul | `dzf_code` |  |
 
-Code de l'étape `preparer` :
+Code de l'étape `calcul` :
 
 ```js
-// row.sites et row.tls sont dans le même ordre
-const maj = (row.sites || []).map((s, i) => { const c = (row.tls || [])[i] || {}; return { id: s.id, tls_jours: c.jours_restants ?? null, tls_expire_le: c.fin || null }; });
-const bientot = (row.sites || []).filter((s, i) => { const c = (row.tls || [])[i] || {}; return c.jours_restants !== null && c.jours_restants !== undefined && c.jours_restants <= (s.tls_alerte_jours || 14); });
-return { maj, bientot, texte: bientot.map((s) => "- " + s.nom).join("\n") };
+// Pourcentage de vérifications réussies par sonde, sur 24 h, 7 jours et 30 jours.
+const S = Table.findOne({ name: "surveillance_sites" });
+const M = Table.findOne({ name: "surveillance_mesures" });
+const pct = async (id, h) => { const r = await M.aggregationQuery({ n: { field: "id", aggregate: "Count" } }, { where: { sonde: id, quand: { gt: new Date(Date.now() - h * 3600e3) } } }); const k = await M.aggregationQuery({ n: { field: "id", aggregate: "Count" } }, { where: { sonde: id, ok: true, quand: { gt: new Date(Date.now() - h * 3600e3) } } }); return r && Number(r.n) ? Math.round((1000 * Number(k.n)) / Number(r.n)) / 10 : null; };
+for (const s of await S.getRows({ actif: true })) await S.updateRow({ dispo_24h: await pct(s.id, 24), dispo_7j: await pct(s.id, 168), dispo_30j: await pct(s.id, 720) }, s.id, undefined, true);
+return true;
 ```
 
 #### `surveillance_menage` — Weekly
 
-Chaque semaine : garde 30 jours de temps de réponse et 180 jours d'incidents.
+Chaque semaine : garde 90 jours de mesures et un an d'incidents.
 
 | Étape | Bloc | Condition |
 |---|---|---|

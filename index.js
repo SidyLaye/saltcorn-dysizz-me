@@ -1,4 +1,4 @@
-/* dysizz-me 2.1.0 — FICHIER GÉNÉRÉ par tools/build.mjs depuis src/. Ne pas modifier à la main. */
+/* dysizz-me 2.2.0 — FICHIER GÉNÉRÉ par tools/build.mjs depuis src/. Ne pas modifier à la main. */
 "use strict";
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __commonJS = (cb, mod) => function __require() {
@@ -10,7 +10,7 @@ var require_core = __commonJS({
   "../src/core.js"(exports2, module2) {
     "use strict";
     var PLUGIN2 = "dysizz-me";
-    var VERSION = true ? "2.1.0" : "dev";
+    var VERSION = true ? "2.2.0" : "dev";
     var isAdmin = (req) => !!(req && req.user && req.user.role_id === 1);
     var esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
     var denied = (res) => res.status(403).send("R\xE9serv\xE9 aux administrateurs");
@@ -352,6 +352,7 @@ var require_settings = __commonJS({
         }
         for (const [k, x] of Object.entries(a.set || {})) c[k] = typeof x === "function" ? x(v) : x;
         await s.update({ configuration: c });
+        await require_installer().restamp(mod.key, a.trigger);
         done.push(`${a.trigger} \u2192 ${a.step}`);
       }
       return done;
@@ -435,6 +436,11 @@ fetch("/dysizz-me/reglages/${esc(mod.key)}/tester",{method:"POST",credentials:"s
         const cfg = await getCfg();
         await saveCfg({ settings: { ...cfg.settings || {}, [mod.key]: out } });
         const done = await applyToWorkflows(mod, out);
+        for (const [pg, fn] of Object.entries(mod.settings.pageRoles || {})) {
+          const Page = require("@saltcorn/data/models/page");
+          const pp = Page.findOne({ name: pg });
+          if (pp) await Page.update(pp.id, { min_role: fn(out) });
+        }
         back("ok", `R\xE9glages enregistr\xE9s${done.length ? " et appliqu\xE9s aux workflows" : ""}. ${mod.settings.after || ""}`);
       } catch (e) {
         back("err", e.message);
@@ -456,7 +462,7 @@ fetch("/dysizz-me/reglages/${esc(mod.key)}/tester",{method:"POST",credentials:"s
       }
       try {
         const r = await Promise.race([action.run({ configuration: { ...T.config(v), sortie: "r", delai_max: 40 }, row: {}, user: req.user, req, mode: "workflow" }), new Promise((_, rej) => setTimeout(() => rej(new Error("pas de r\xE9ponse apr\xE8s 45 s")), 45e3))]);
-        reply(true, T.ok ? T.ok(r && r.r, v) : "\xC7a marche.");
+        reply(true, T.ok ? T.ok(T.okFull ? r : r && r.r, v) : "\xC7a marche.");
       } catch (e) {
         reply(false, (T.explain ? T.explain(e.message) : "") || `\xC9chec : ${e.message}`);
       }
@@ -595,7 +601,18 @@ var require_installer = __commonJS({
         tb = Table.findOne({ name: t.name });
         const have = new Set(tb.getFields().map((f) => f.name));
         for (const f of t.fields) {
-          if (have.has(f.name)) continue;
+          if (have.has(f.name)) {
+            const exf = tb.getFields().find((x) => x.name === f.name);
+            if (f.is_unique === false && exf && exf.is_unique) {
+              try {
+                await exf.update({ is_unique: false });
+                log.push(`champ ${t.name}.${f.name} : plus unique`);
+              } catch (e) {
+                log.push(`champ ${t.name}.${f.name} : ${e.message}`);
+              }
+            }
+            continue;
+          }
           await Field.create({ table: tb, ...fieldSpec(f) });
           log.push(`champ ${t.name}.${f.name} ajout\xE9`);
         }
@@ -643,25 +660,27 @@ var require_installer = __commonJS({
         const want = stepsOf(wf);
         if (!ex) {
           const created = await Trigger.create(def);
+          const tid = created.id || (Trigger.findOne({ name: wf.name }) || {}).id;
           await writeSteps(created, want, []);
           log.push(`workflow ${wf.name} cr\xE9\xE9 (${want.length} \xE9tapes)`);
+          my["t:" + wf.name] = hash((await readSteps(tid)).map(norm));
         } else {
           const cur = await readSteps(ex.id);
-          if (reset || !my["t:" + wf.name] || hash(cur.map(norm)) === my["t:" + wf.name]) {
+          if (reset || !my["t:" + wf.name] || hash(cur.map(norm)) === my["t:" + wf.name] || hash(cur.map(norm)) === hash(want.map(norm))) {
             await Trigger.update(ex.id, { ...def, when_trigger: reset ? wf.when : ex.when_trigger });
             await writeSteps(ex, want, cur, wf.keep || {});
+            my["t:" + wf.name] = hash((await readSteps(ex.id)).map(norm));
           } else log.push(`workflow ${wf.name} gard\xE9 (tu l'as modifi\xE9)`);
         }
-        my["t:" + wf.name] = hash(want.map(norm));
       }
       await state.refresh_triggers?.(true);
       installed.add(mod.key);
       const mods = allMods.filter((m) => installed.has(m.key));
       for (const p of mod.pages || []) {
         const ex = Page.findOne({ name: p.name });
-        const layout = shellLayout(mods, p, contentOf(p, installed));
+        const layout = p.shell === false ? { above: contentOf(p, installed) } : shellLayout(mods, p, contentOf(p, installed));
         if (!ex) {
-          await Page.create({ name: p.name, title: p.title, description: p.description || "", min_role: 1, layout, fixed_states: {}, attributes: { no_menu: true, request_fluid_layout: true } });
+          await Page.create({ name: p.name, title: p.title, description: p.description || "", min_role: p.min_role || 1, layout, fixed_states: {}, attributes: { no_menu: p.shell !== false, request_fluid_layout: true } });
           log.push(`page ${p.name} cr\xE9\xE9e`);
         } else if (reset || !my["p:" + p.name] || hash(stripShell(ex.layout)) === my["p:" + p.name]) {
           await Page.update(ex.id, { layout, title: p.title, description: p.description || "", attributes: { ...ex.attributes || {}, no_menu: true, request_fluid_layout: true } });
@@ -737,7 +756,7 @@ var require_installer = __commonJS({
       const mods = allMods.filter((m) => installed.has(m.key));
       for (const m of mods) for (const p of m.pages || []) {
         const ex = Page.findOne({ name: p.name });
-        if (!ex) continue;
+        if (!ex || p.shell === false) continue;
         const my = stamps[m.key] || {};
         if (typeof p.content === "function" && (!my["p:" + p.name] || hash(stripShell(ex.layout)) === my["p:" + p.name])) {
           const layout2 = shellLayout(mods, p, contentOf(p, installed));
@@ -785,7 +804,16 @@ var require_installer = __commonJS({
       }
       return out;
     };
-    module2.exports = { missingDeps, installModule, uninstallModule, moduleStatus, getCfg, saveCfg, refreshAllShells };
+    var restamp = async (modKey, triggerName) => {
+      const { Trigger } = M();
+      const t = Trigger.findOne({ name: triggerName });
+      if (!t) return;
+      const cfg = await getCfg();
+      const stamps = { ...cfg.stamps || {} };
+      stamps[modKey] = { ...stamps[modKey] || {}, ["t:" + triggerName]: hash((await readSteps(t.id)).map(norm)) };
+      await saveCfg({ stamps });
+    };
+    module2.exports = { restamp, missingDeps, installModule, uninstallModule, moduleStatus, getCfg, saveCfg, refreshAllShells };
   }
 });
 
@@ -1836,15 +1864,17 @@ if (!(await C.getRow({ offre: row.id })))
   await C.insertRow({ entreprise: row.entreprise || "?", poste: row.titre, offre: row.id, lien: row.url, statut: "\xE0 envoyer" });
 await table.updateRow({ statut: "postul\xE9" }, row.id, user);
 return { notify: "Ajout\xE9e \xE0 tes candidatures", reload_page: true };`;
-    var CHERCHER = `// Pour chaque recherche active : bloc France Travail, puis rangement sans doublon.
+    var CHERCHER = `// Pour chaque recherche active : le bloc \xAB Emploi : chercher dans plusieurs sources \xBB,
+// puis rangement sans doublon. Chaque source en panne est not\xE9e dans l'\xE9tat de la recherche.
 const R = Table.findOne({ name: "emploi_recherches" });
 let nouvelles = 0;
 for (const r of await R.getRows({ actif: true })) {
-  const o = await Actions.dzf_france_travail({ mots_cles: r.mots_cles || "", departement: r.departement || "", commune: r.commune || "", rayon_km: r.rayon_km || "", contrat: r.contrat || "", alternance: !!r.alternance, depuis_jours: r.depuis_jours || 7, sortie: "offres", si_erreur: "continuer" });
+  const o = await Actions.dzf_emplois({ sources: r.sources || "france_travail,adzuna,jooble,arbeitnow,remotive,jobicy,himalayas,remoteok", mots_cles: r.mots_cles || "", departement: r.departement || "", lieu: r.lieu || "", commune: r.commune || "", rayon_km: r.rayon_km || "", contrat: r.contrat || "", alternance: !!r.alternance, teletravail: !!r.teletravail, depuis_jours: r.depuis_jours || 7, flux_rss: r.flux_rss || "", sortie: "offres", si_erreur: "continuer" });
   const offres = (o.offres || []).map((x) => ({ ...x, recherche: r.id, statut: "nouvelle" }));
   const u = await Actions.dzf_table_upsert({ table: "offres_emploi", liste: offres, cle: "ref", sortie: "b" });
   nouvelles += (u.b && u.b.ajoutes) || 0;
-  await R.updateRow({ derniere_synchro: new Date(), etat: o.offres_erreur ? String(o.offres_erreur).slice(0, 200) : "ok" }, r.id, undefined, true);
+  const bilan = (o.offres_sources || []).filter((x) => !x.ignoree).map((x) => x.source + (x.ok ? " " + x.offres : " \u2717")).join(" \xB7 ");
+  await R.updateRow({ derniere_synchro: new Date(), etat: o.offres_erreur ? String(o.offres_erreur).slice(0, 200) : (bilan || "aucune source").slice(0, 300) }, r.id, undefined, true);
 }
 return nouvelles;`;
     module2.exports = {
@@ -1852,23 +1882,29 @@ return nouvelles;`;
       label: "Emploi",
       icon: "fas fa-user-tie",
       group: "Travail",
-      description: "Offres d'emploi en France (API France Travail, gratuite) selon tes recherches enregistr\xE9es, tri rapide (int\xE9ressante / \xE9carter / postuler) et suivi des candidatures avec relance automatique.",
+      description: "Offres d'emploi en France et en t\xE9l\xE9travail, cherch\xE9es dans plusieurs sources (France Travail, Adzuna, Jooble, Arbeitnow, Remotive, Jobicy, Himalayas, RemoteOK, flux RSS) selon tes recherches enregistr\xE9es, tri rapide (int\xE9ressante / \xE9carter / postuler) et suivi des candidatures avec relance automatique.",
       depends: [],
-      setup: `<p>Cr\xE9e une application gratuite sur <a href="https://francetravail.io" target="_blank" rel="noopener">francetravail.io</a> (API \xAB Offres d'emploi v2 \xBB), puis colle ses deux cl\xE9s dans <a href="/dysizz-me/reglages/emploi">R\xE9gler Emploi</a>. Tes recherches se r\xE8glent ensuite dans la page Emploi.</p>`,
+      setup: `<p>Sans rien r\xE9gler, les sources sans cl\xE9 marchent d\xE9j\xE0 (Arbeitnow, Remotive, Jobicy, Himalayas, RemoteOK). Pour plus d'offres fran\xE7aises, ajoute des cl\xE9s gratuites dans <a href="/dysizz-me/reglages/emploi">R\xE9gler Emploi</a> : France Travail, Adzuna, Jooble.</p>`,
       settings: {
-        intro: `Les offres viennent de l'API officielle de France Travail (gratuite). 1) Cr\xE9e un compte sur <a href="https://francetravail.io" target="_blank" rel="noopener">francetravail.io</a>. 2) \xAB Cr\xE9er une application \xBB, coche l'API <b>Offres d'emploi v2</b>. 3) Copie ici l'identifiant et la cl\xE9 secr\xE8te.`,
+        intro: `Les sources <b>sans cl\xE9</b> marchent d\xE9j\xE0 : Arbeitnow (Europe), Remotive, Jobicy, Himalayas, RemoteOK (t\xE9l\xE9travail). Pour beaucoup plus d'offres en France, ajoute une ou plusieurs <b>cl\xE9s gratuites</b> :<ul><li><a href="https://francetravail.io" target="_blank" rel="noopener">francetravail.io</a> \u2192 cr\xE9er une application, cocher \xAB Offres d'emploi v2 \xBB.</li><li><a href="https://developer.adzuna.com" target="_blank" rel="noopener">developer.adzuna.com</a> \u2192 s'inscrire, copier App ID et App Key.</li><li><a href="https://fr.jooble.org/api/about" target="_blank" rel="noopener">jooble.org/api</a> \u2192 demander une cl\xE9.</li></ul>`,
         fields: [
-          { name: "client_id", label: "Identifiant client", type: "password", secret: "FT_CLIENT_ID", required: true },
-          { name: "client_secret", label: "Cl\xE9 secr\xE8te", type: "password", secret: "FT_CLIENT_SECRET", required: true }
+          { name: "ft_id", label: "France Travail \xB7 identifiant client", type: "password", secret: "FT_CLIENT_ID" },
+          { name: "ft_secret", label: "France Travail \xB7 cl\xE9 secr\xE8te", type: "password", secret: "FT_CLIENT_SECRET" },
+          { name: "adzuna_id", label: "Adzuna \xB7 App ID", type: "password", secret: "ADZUNA_APP_ID" },
+          { name: "adzuna_key", label: "Adzuna \xB7 App Key", type: "password", secret: "ADZUNA_APP_KEY" },
+          { name: "jooble_key", label: "Jooble \xB7 cl\xE9", type: "password", secret: "JOOBLE_KEY" }
         ],
-        apply: [{ trigger: "emplois_releve", step: "configure", set: { condition: "true" } }],
+        apply: [],
         test: {
-          action: "dzf_france_travail",
-          config: () => ({ mots_cles: "data", depuis_jours: 7 }),
-          ok: (r) => `Connexion r\xE9ussie. ${Array.isArray(r) ? r.length : 0} offre(s) \xAB data \xBB cette semaine.`,
-          explain: (m) => /401|invalid_client|unauthorized/i.test(m) ? "France Travail refuse les cl\xE9s : recopie-les (et v\xE9rifie que l'API Offres d'emploi v2 est coch\xE9e)." : ""
+          action: "dzf_emplois",
+          config: () => ({ sources: "france_travail,adzuna,jooble,arbeitnow,remotive,jobicy,himalayas,remoteok", mots_cles: "data,devops", depuis_jours: 7 }),
+          okFull: true,
+          ok: (r) => {
+            const s = r && r.r_sources || [];
+            return `${(r && r.r || []).length} offre(s) cette semaine. ${s.map((x) => `${x.source} : ${x.ok ? x.offres : x.ignoree ? "pas de cl\xE9" : "erreur (" + x.erreur + ")"}`).join(" \xB7 ")}`;
+          }
         },
-        after: "R\xE8gle maintenant tes recherches dans la page Emploi."
+        after: "R\xE8gle maintenant tes recherches dans la page Emploi (mots-cl\xE9s, lieu, sources)."
       },
       tables: [
         {
@@ -1881,6 +1917,9 @@ return nouvelles;`;
             K.s("commune", "Code commune INSEE"),
             K.int("rayon_km", "Rayon (km) autour de la commune"),
             K.s("contrat", "Contrat", { description: "CDI, CDD, MIS (int\xE9rim)\u2026 vide = tous" }),
+            K.s("sources", "Sources", { description: "france_travail, adzuna, jooble, arbeitnow, remotive, jobicy, himalayas, remoteok, rss \u2014 vide = toutes", default: "france_travail,adzuna,jooble,arbeitnow,remotive,jobicy,himalayas,remoteok" }),
+            K.s("lieu", "Ville ou r\xE9gion (Adzuna, Jooble)"),
+            K.s("flux_rss", "Flux RSS d'offres (source rss)"),
             K.bool("alternance", "Alternance seulement"),
             K.bool("teletravail", "T\xE9l\xE9travail"),
             K.int("depuis_jours", "Publi\xE9es depuis (jours)", { default: 7 }),
@@ -1906,6 +1945,8 @@ return nouvelles;`;
             K.key("recherche", "Recherche", "emploi_recherches", "nom"),
             K.opts("statut", "Statut", ["nouvelle", "int\xE9ressante", "postul\xE9", "\xE9cart\xE9e"]),
             K.s("source", "Source"),
+            K.s("logo", "Logo"),
+            K.bool("teletravail", "T\xE9l\xE9travail"),
             K.s("note", "Note")
           ]
         },
@@ -1929,9 +1970,13 @@ return nouvelles;`;
         K.show("offre_carte", "offres_emploi", K.box(
           "`dzv-tile dzv-offre dzv-o-${String(statut || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\s+/g, '-')}`",
           K.O({ clsFormula: true, id: "`off-${id}`" }),
-          K.meta(K.field("entreprise", "as_text"), K.field("lieu", "as_text"), K.dateFr("date")),
+          K.box(
+            "dzv-offre-top",
+            K.formula(`logo && /^https?:/.test(logo) ? '<img class="dzv-offre-logo" loading="lazy" referrerpolicy="no-referrer" alt="" src="' + String(logo).replace(/"/g, '%22') + '">' : '<span class="dzv-offre-logo dzv-noimg">' + String(entreprise || '?').trim().charAt(0).replace(/[<>&]/g, '?') + '</span>'`, { html: true, block: false }),
+            K.meta(K.field("entreprise", "as_text"), K.field("lieu", "as_text"), K.dateFr("date"))
+          ),
           K.box("dzv-tile-title", K.O({ url: "`javascript:ajax_modal('/view/offre_lecture?id=${id}')`", urlFormula: true }), K.field("titre", "as_text")),
-          K.meta(K.field("contrat", "as_text", { cls: "dzv-pill" }), K.field("salaire", "as_text")),
+          K.meta(K.field("source", "as_text"), K.field("contrat", "as_text"), K.field("salaire", "as_text")),
           K.box(
             "dzv-tile-actions",
             setStatut("Int\xE9ressante", "int\xE9ressante", "fas fa-heart"),
@@ -1951,7 +1996,7 @@ return nouvelles;`;
           K.field("description", "as_text", { cls: "dzv-mail-body", block: true })
         ), { title: "Offre", width: 860 }),
         K.feed("offres_fil", "offres_emploi", "offre_carte", { include: 'statut != "\xE9cart\xE9e" && statut != "postul\xE9"', order: "date", desc: true, limit: 30, md: 2, lg: 3 }),
-        K.edit("recherche_modifier", "emploi_recherches", [["nom", "Nom"], ["mots_cles", "Mots-cl\xE9s"], ["departement", "D\xE9partement(s)"], ["contrat", "Contrat (CDI, CDD\u2026)"], ["commune", "Code commune INSEE"], ["rayon_km", "Rayon (km)"], ["depuis_jours", "Publi\xE9es depuis (jours)"], ["alternance", "Alternance seulement"], ["teletravail", "T\xE9l\xE9travail"], ["actif", "Active"]], { delete: true, title: "Recherche", width: 620 }),
+        K.edit("recherche_modifier", "emploi_recherches", [["nom", "Nom"], ["mots_cles", "Mots-cl\xE9s"], ["sources", "Sources"], ["departement", "D\xE9partement(s) (France Travail)"], ["lieu", "Ville ou r\xE9gion (Adzuna, Jooble)"], ["flux_rss", "Flux RSS d'offres"], ["contrat", "Contrat (CDI, CDD\u2026)"], ["commune", "Code commune INSEE"], ["rayon_km", "Rayon (km)"], ["depuis_jours", "Publi\xE9es depuis (jours)"], ["alternance", "Alternance seulement"], ["teletravail", "T\xE9l\xE9travail"], ["actif", "Active"]], { delete: true, title: "Recherche", width: 620 }),
         K.list(
           "recherches_liste",
           "emploi_recherches",
@@ -1974,7 +2019,6 @@ return nouvelles;`;
       ],
       triggers: [
         K.wf("emplois_releve", "Hourly", null, "Cherche les nouvelles offres pour tes recherches (toutes les heures)", [
-          K.st("configure", "dzf_verifier", { condition: "!!(process.env.FT_CLIENT_ID && process.env.FT_CLIENT_SECRET)", si_faux: "renvoyer faux", sortie: "configure" }, { next_step: 'configure ? "chercher" : ""' }),
           K.st("chercher", "dzf_code", { code: CHERCHER, sortie: "nouvelles", delai_max: 300 }),
           K.st("ancien", "dzf_dates", { operation: "ajouter des jours", jours: -45, sortie: "limite" }),
           K.st("menage", "dzf_table_supprimer", { table: "offres_emploi", filtre: K.J({ statut: { in: ["nouvelle", "\xE9cart\xE9e"] }, date: { lt: "{{limite}}" } }), sortie: "supprimees" })
@@ -2033,6 +2077,8 @@ await table.updateRow({ ${field}: !row.${field} }, row.id, user);
 return { eval_js: "var c=document.getElementById('art-" + row.id + "');if(c)c.classList.toggle('${cls}'," + !row.${field} + ")" };`, { icon, style: "btn-link", cls: `dzv-tg dzv-tg-${field}` });
     var SRC = (s) => ({ ...s, actif: true, etat: "", erreur: "" });
     var site = (nom, url, theme) => SRC({ nom, type: "site", url, theme });
+    var THEME_ICON = { dev: "fa-code", cyber: "fa-shield-alt", ia: "fa-brain", devops: "fa-infinity", mlops: "fa-project-diagram", cloud: "fa-cloud", "r\xE9seau": "fa-network-wired", "syst\xE8mes": "fa-server", data: "fa-database", "tech fr": "fa-laptop-code", "actus france": "fa-newspaper", "actus s\xE9n\xE9gal": "fa-globe-africa" };
+    var IMG_FML = (cls) => `(image && /^https?:/.test(image)) ? '<div class="${cls}"><img loading="lazy" referrerpolicy="no-referrer" alt="" src="' + String(image).replace(/"/g, '%22').replace(/</g, '%3C') + '" onerror="this.parentNode.classList.add(\\'dzv-noimg\\');this.remove()"></div>' : '<div class="${cls} dzv-noimg"><i class="fas ' + (${JSON.stringify(THEME_ICON)}[theme] || 'fa-rss') + '"></i></div>'`;
     var card = (extraTop = []) => K.box(
       "`dzv-article${lu ? ' dzv-read' : ''}${favori ? ' dzv-fav' : ''}${plus_tard ? ' dzv-later' : ''}`",
       K.O({ clsFormula: true, id: "`art-${id}`" }),
@@ -2104,7 +2150,7 @@ return { notify: "Relecture lanc\xE9e", reload_page: true };`;
         }
       ],
       views: [
-        K.show("article_carte", "veille_articles", card([K.image("image || ''", { cls: "dzv-article-img" })]), { description: "Carte d'un article" }),
+        K.show("article_carte", "veille_articles", card([K.formula(IMG_FML("dzv-article-img"), { html: true })]), { description: "Carte d'un article" }),
         K.feed("veille_fil", "veille_articles", "article_carte", { include: 'type == "article" && theme != "actus france" && theme != "actus s\xE9n\xE9gal"', order: "date", desc: true, limit: 30, md: 2, lg: 3 }),
         K.edit("source_modifier", "veille_sources", [["nom", "Nom"], ["type", "Type"], ["theme", "Th\xE8me"], ["url", "Adresse du flux (site)"], ["chaine", "Cha\xEEne YouTube (@nom)"], ["actif", "Suivie"]], { delete: true, title: "Source", width: 620 }),
         K.list("sources_liste", "veille_sources", [
@@ -2122,6 +2168,7 @@ return { notify: "Relecture lanc\xE9e", reload_page: true };`;
           K.st("sources", "dzf_table_chercher", { table: "veille_sources", filtre: K.J({ actif: true }), limite: 500, sortie: "sources" }),
           K.st("lire", "dzf_rss", { sources: "{{sources}}", champs_source: "theme", max_par_source: 30, en_parallele: 4, delai_max: 240, sortie: "articles" }),
           K.st("nouveaux", "dzf_liste_dedoublonner", { liste: "{{articles}}", cle: "url", table: "veille_articles", sortie: "nouveaux" }),
+          K.st("images", "dzf_images_articles", { liste: "{{nouveaux}}", max: 40, en_parallele: 6, delai_s: 8, sortie: "nouveaux", si_erreur: "continuer", delai_max: 150 }, { only_if: "nouveaux.length > 0" }),
           K.st("maintenant", "dzf_dates", { operation: "maintenant", sortie: "maintenant" }),
           K.st("preparer", "dzf_liste_transformer", { liste: "{{nouveaux}}", modele: K.J({ source: "{{item.source}}", titre: "{{item.titre}}", url: "{{item.url}}", date: "{{item.date}}", resume: "{{item.resume}}", image: "{{item.image}}", auteur: "{{item.auteur}}", theme: "{{item.source_theme}}", type: "{{item.type}}", video_id: "{{item.video_id}}", lu: false, favori: false, plus_tard: false, ajoute_le: "{{maintenant}}" }), sortie: "lignes" }),
           K.st("ranger", "dzf_table_upsert", { table: "veille_articles", liste: "{{lignes}}", cle: "url", sans_declencheurs: true, sortie: "bilan" }),
@@ -2206,6 +2253,7 @@ return { notify: "Relecture lanc\xE9e", reload_page: true };`;
     module2.exports.THEMES = THEMES;
     module2.exports.card = card;
     module2.exports.toggle = toggle;
+    module2.exports.IMG_FML = IMG_FML;
   }
 });
 
@@ -2218,7 +2266,7 @@ var require_videos = __commonJS({
     var yt = (nom, chaine, youtube_id, theme) => ({ nom, type: "youtube", chaine, youtube_id: youtube_id || "", theme, actif: true, etat: "", erreur: "", url: "" });
     var VID = "String(video_id || '').replace(/[^\\w-]/g, '')";
     var THUMB = `'<span class="dzv-thumb"><img loading="lazy" alt="" src="https://i.ytimg.com/vi/' + ${VID} + '/mqdefault.jpg"></span>'`;
-    var PLAYER = `'<div class="dzv-player"><iframe src="https://www.youtube-nocookie.com/embed/' + ${VID} + '?rel=0" title="Lecteur vid\xE9o" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div>'`;
+    var PLAYER = `'<div class="dzv-player"><iframe src="https://www.youtube-nocookie.com/embed/' + ${VID} + '?rel=0&playsinline=1" title="Lecteur vid\xE9o" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" loading="lazy"></iframe></div><p class="dzv-player-alt"><a target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=' + ${VID} + '"><i class="fab fa-youtube"></i> Ouvrir sur YouTube</a></p>'`;
     module2.exports = {
       key: "videos",
       label: "Vid\xE9os",
@@ -2302,6 +2350,7 @@ var require_actus = __commonJS({
   "../src/modules/actus.js"(exports2, module2) {
     "use strict";
     var K = require_kit();
+    var { IMG_FML } = require_veille();
     var site = (nom, url, theme) => ({ nom, type: "site", url, theme, actif: true, etat: "", erreur: "" });
     module2.exports = {
       key: "actus",
@@ -2313,11 +2362,11 @@ var require_actus = __commonJS({
       tables: [],
       views: [
         K.show("actu_ligne", "veille_articles", K.box(
-          "`dzv-line${lu ? ' dzv-read' : ''}`",
+          "`dzv-line dzv-line-img${lu ? ' dzv-read' : ''}`",
           K.O({ clsFormula: true, id: "`art-${id}`" }),
-          K.box("dzv-line-src", K.join("source.nom", "as_text")),
-          K.box("", K.link("titre", "url"), K.box("dzv-mail-ext", K.dateFr("date", { time: true })))
-        ), { description: "Une ligne d'actualit\xE9" }),
+          K.formula(IMG_FML("dzv-line-thumb"), { html: true }),
+          K.box("", K.box("dzv-line-src", K.join("source.nom", "as_text")), K.link("titre", "url", { cls: "dzv-line-title" }), K.box("dzv-mail-ext", K.dateFr("date", { time: true })))
+        ), { description: "Une ligne d'actualit\xE9 avec son image" }),
         K.feed("actus_france", "veille_articles", "actu_ligne", { include: 'theme == "actus france"', order: "date", desc: true, limit: 25, md: 1, lg: 1 }),
         K.feed("actus_senegal", "veille_articles", "actu_ligne", { include: 'theme == "actus s\xE9n\xE9gal"', order: "date", desc: true, limit: 25, md: 1, lg: 1 })
       ],
@@ -2359,119 +2408,235 @@ var require_surveillance = __commonJS({
   "../src/modules/surveillance.js"(exports2, module2) {
     "use strict";
     var K = require_kit();
-    var PREPARER = `// row.sites = les sites avant l'appel, row.resultats = l'appel (m\xEAme ordre)
-const avant = new Map((row.sites || []).map((s) => [s.id, s]));
-const quand = new Date().toISOString();
-const maj = [], mesures = [], evenements = [];
-for (const r of row.resultats || []) {
-  const s = avant.get(r.id) || {};
-  maj.push({ id: r.id, etat: r.etat, ms: r.ms, code_http: r.statut, raison: r.raison || "", verifie_le: quand });
-  mesures.push({ quand, site: s.nom || r.url, ms: r.ms });
-  if (s.etat !== r.etat && (s.etat || r.etat !== "ok"))
-    evenements.push({ quand, site: s.nom || r.url, etat: r.etat, message: s.etat ? (r.etat === "ok" ? "de nouveau en ligne" : r.etat === "lent" ? "r\xE9pond lentement" + (r.raison ? " : " + r.raison : "") : "en panne" + (r.raison ? " : " + r.raison : "")) : "premi\xE8re v\xE9rification : " + r.etat });
+    var TYPES = ["http", "api", "tcp", "dns", "dns_change", "tls", "domaine", "contenu", "liste_noire", "mail", "prometheus", "battement", "securite"];
+    var TYPE_AIDE = {
+      http: "Site ou page : code HTTP, temps de r\xE9ponse, texte attendu (champ \xAB Attendu \xBB)",
+      api: "Sc\xE9nario d'API en plusieurs appels, avec v\xE9rifications (JSON dans \xAB Attendu \xBB)",
+      tcp: "Service joignable sur un port (base, SMTP, SSH\u2026) : cible = serveur, port",
+      dns: "Le domaine pointe bien vers \xAB Attendu \xBB (ex. l'IP de ton serveur)",
+      dns_change: "Pr\xE9vient si les enregistrements DNS changent (d\xE9tournement, erreur)",
+      tls: "Certificat : jours restants (seuil = jours avant alerte)",
+      domaine: "Expiration du nom de domaine (seuil = jours avant alerte)",
+      contenu: "La page a chang\xE9 (d\xE9figuration, prix, CGU\u2026) ; \xAB Attendu \xBB = rep\xE8re de d\xE9but",
+      liste_noire: "IP ou domaine sur une liste noire anti-spam",
+      mail: "SPF, DMARC, MX du domaine",
+      prometheus: "Valeur d'une m\xE9trique (\xAB Attendu \xBB = requ\xEAte PromQL, seuil = maximum)",
+      battement: "Une t\xE2che cron doit appeler son adresse de battement ; seuil = minutes max sans nouvelles",
+      securite: "Note de s\xE9curit\xE9 A \xE0 F (en-t\xEAtes, TLS, ports, mail, liste noire), 1 fois par jour"
+    };
+    var VERIFIER = `// Sondes dues (selon leur intervalle), v\xE9rifi\xE9es 6 par 6 avec le bon bloc dysizz-flow.
+const S = Table.findOne({ name: "surveillance_sites" });
+const M = Table.findOne({ name: "surveillance_mesures" });
+const E = Table.findOne({ name: "surveillance_evenements" });
+const now = Date.now();
+const sondes = (await S.getRows({ actif: true })).filter((s) => !s.verifie_le || now - new Date(s.verifie_le) >= Math.max(1, s.intervalle_min || 5) * 60e3 - 45e3);
+const host = (u) => String(u || "").replace(/^https?:\\/\\//, "").replace(/[\\/:].*$/, "");
+const one = async (s) => {
+  const t0 = Date.now();
+  const r = async (bloc, cfg) => { const o = await Actions[bloc]({ ...cfg, sortie: "r", si_erreur: "continuer" }); if (o.r_erreur) throw new Error(o.r_erreur); return o.r; };
+  try {
+    switch (s.type || "http") {
+      case "http": { const x = await r("dzf_ping_http", { cibles: s.url, contient: s.attendu || "", lent_ms: s.seuil || 2000, delai_s: 15 }); return { etat: x.etat, ms: x.ms, code_http: x.statut, raison: x.raison }; }
+      case "api": { const x = await r("dzf_api_scenario", { etapes: s.attendu || "[]" }); return { etat: x.etat, ms: x.ms, raison: x.raison, details: x.etapes }; }
+      case "tcp": { const x = await r("dzf_port_ouvert", { hote: host(s.url), port: s.port || 443, delai_ms: 5000 }); return { etat: x.ok ? (s.seuil && x.ms > s.seuil ? "lent" : "ok") : "panne", ms: x.ms, raison: x.raison }; }
+      case "dns": { const x = await r("dzf_dns", { domaine: host(s.url), type: "A", attendu: s.attendu || "" }); return { etat: x.ok ? "ok" : "panne", raison: x.ok ? "" : "attendu " + s.attendu + ", trouv\xE9 " + x.valeurs.join(", "), details: x.valeurs }; }
+      case "dns_change": { const x = await r("dzf_dns_changement", { domaine: host(s.url) }); return { etat: x.etat, raison: x.raison, details: x.enregistrements }; }
+      case "tls": { const x = await r("dzf_certificat_tls", { hotes: host(s.url), port: s.port || 443 }); const j = x.jours_restants; return { etat: j === null ? "panne" : j < 0 || x.valide === false ? "panne" : j <= (s.seuil || 14) ? "lent" : "ok", raison: j === null ? x.erreur : j + " jour(s) restant(s)" + (x.valide === false ? " \xB7 invalide" : ""), tls_jours: j, tls_expire_le: x.fin || null }; }
+      case "domaine": { const x = await r("dzf_domaine_expiration", { domaine: host(s.url), alerte_jours: s.seuil || 30 }); return { etat: x.etat === "inconnu" ? "lent" : x.etat, raison: x.jours_restants === null ? "date inconnue" : "expire dans " + x.jours_restants + " j (" + (x.registrar || "?") + ")" }; }
+      case "contenu": { const x = await r("dzf_contenu_change", { url: s.url, debut: s.attendu || "" }); return { etat: x.etat, raison: x.change ? "modifi\xE9e : " + x.apercu : x.premiere_fois ? "premi\xE8re lecture" : "" }; }
+      case "liste_noire": { const x = await r("dzf_liste_noire", { cible: host(s.url) }); return { etat: x.etat, raison: x.raison, details: x.details }; }
+      case "mail": { const x = await r("dzf_dns_mail", { domaine: host(s.url) }); return { etat: x.ok ? "ok" : "lent", raison: (x.conseils || []).join(" ; "), details: { spf: x.spf, dmarc: x.dmarc, mx: x.mx } }; }
+      case "prometheus": { const x = await r("dzf_prometheus", { url: s.url, requete: s.attendu || "up", max: s.seuil === null || s.seuil === undefined ? "" : s.seuil }); return { etat: x.etat, raison: x.raison || "valeur " + x.valeur, ms: Math.round(x.valeur) }; }
+      case "battement": { const age = s.dernier_ok ? (now - new Date(s.dernier_ok)) / 60e3 : null; return { etat: age === null ? "lent" : age > (s.seuil || 60) ? "panne" : "ok", raison: age === null ? "jamais re\xE7u" : "dernier signal il y a " + Math.round(age) + " min", keep_ok: true }; }
+      case "securite": { const x = await r("dzf_note_securite", { url: s.url }); return { etat: x.etat, raison: "note " + x.note + " (" + x.score + "/100)" + (x.a_corriger.length ? " \xB7 " + x.a_corriger.slice(0, 2).join(" ; ") : ""), note_secu: x.note, score: x.score, details: x.a_corriger }; }
+      default: return { etat: "panne", raison: "type inconnu : " + s.type };
+    }
+  } catch (e) { return { etat: "panne", raison: String(e.message || e).slice(0, 300), ms: Date.now() - t0 }; }
+};
+const alertes = [];
+for (let i = 0; i < sondes.length; i += 6) {
+  await Promise.all(sondes.slice(i, i + 6).map(async (s) => {
+    const x = await one(s);
+    const quand = new Date();
+    const maj = { etat: x.etat, raison: String(x.raison || "").slice(0, 500), verifie_le: quand };
+    if (x.ms !== undefined) maj.ms = x.ms;
+    if (x.code_http !== undefined) maj.code_http = x.code_http;
+    for (const k of ["tls_jours", "tls_expire_le", "note_secu", "score"]) if (x[k] !== undefined) maj[k] = x[k];
+    if (x.details !== undefined) maj.details = JSON.stringify(x.details).slice(0, 8000);
+    if (x.etat === "ok" && !x.keep_ok) maj.dernier_ok = quand;
+    if (s.type === "battement" && !s.jeton) maj.jeton = [...Array(24)].map(() => "abcdefghijkmnpqrstuvwxyz23456789"[Math.floor(Math.random() * 32)]).join("");
+    await S.updateRow(maj, s.id, undefined, true);
+    await M.insertRow({ quand, site: s.nom, sonde: s.id, ms: x.ms ?? null, ok: x.etat !== "panne" }, undefined, undefined, true);
+    /* incident : ouvert \xE0 la panne, ferm\xE9 au retour */
+    const ouvert = await E.getRow({ sonde: s.id, ouvert: true });
+    if (x.etat === "panne" && !ouvert) await E.insertRow({ quand, debut: quand, site: s.nom, sonde: s.id, etat: "panne", ouvert: true, message: "En panne : " + (x.raison || "?") });
+    if (x.etat !== "panne" && ouvert) await E.updateRow({ ouvert: false, fin: quand, duree_min: Math.round((quand - new Date(ouvert.debut || ouvert.quand)) / 60e3), etat: "ok", message: ouvert.message + " \u2192 r\xE9tabli" }, ouvert.id);
+    if (x.etat === "lent" && s.etat !== "lent" && s.etat) await E.insertRow({ quand, debut: quand, fin: quand, site: s.nom, sonde: s.id, etat: "lent", ouvert: false, message: "Attention : " + (x.raison || "") });
+    const a = await Actions.dzf_alerte({ cle: "sonde-" + s.id, probleme: x.etat === "panne", silence_min: 60, sortie: "a" });
+    if (a.a && a.a.envoyer) alertes.push((a.a.etat === "r\xE9tabli" ? "\u2705 " : "\u{1F534} ") + s.nom + " : " + a.a.etat + (x.raison && a.a.etat !== "r\xE9tabli" ? " (" + x.raison + ")" : a.a.duree_min ? " apr\xE8s " + a.a.duree_min + " min" : ""));
+  }));
 }
-const pannes = (row.resultats || []).filter((r) => r.etat === "panne");
-return { maj, mesures, evenements, pannes, texte: pannes.map((p) => "- " + (avant.get(p.id) || {}).nom + " (" + (p.raison || "?") + ")").join("\\n") };`;
-    var TLS = `// row.sites et row.tls sont dans le m\xEAme ordre
-const maj = (row.sites || []).map((s, i) => { const c = (row.tls || [])[i] || {}; return { id: s.id, tls_jours: c.jours_restants ?? null, tls_expire_le: c.fin || null }; });
-const bientot = (row.sites || []).filter((s, i) => { const c = (row.tls || [])[i] || {}; return c.jours_restants !== null && c.jours_restants !== undefined && c.jours_restants <= (s.tls_alerte_jours || 14); });
-return { maj, bientot, texte: bientot.map((s) => "- " + s.nom).join("\\n") };`;
-    var TLS_FML = `tls_jours === null || tls_jours === undefined ? '' : tls_jours < 0 ? '<span class="dzv-meta dzv-late">certificat expir\xE9</span>' : tls_jours <= 14 ? '<span class="dzv-meta dzv-today">certificat : ' + tls_jours + ' j</span>' : '<span class="dzv-meta">certificat : ' + tls_jours + ' j</span>'`;
+return { verifiees: sondes.length, alertes, texte: alertes.join("\\n") };`;
+    var DISPO = `// Pourcentage de v\xE9rifications r\xE9ussies par sonde, sur 24 h, 7 jours et 30 jours.
+const S = Table.findOne({ name: "surveillance_sites" });
+const M = Table.findOne({ name: "surveillance_mesures" });
+const pct = async (id, h) => { const r = await M.aggregationQuery({ n: { field: "id", aggregate: "Count" } }, { where: { sonde: id, quand: { gt: new Date(Date.now() - h * 3600e3) } } }); const k = await M.aggregationQuery({ n: { field: "id", aggregate: "Count" } }, { where: { sonde: id, ok: true, quand: { gt: new Date(Date.now() - h * 3600e3) } } }); return r && Number(r.n) ? Math.round((1000 * Number(k.n)) / Number(r.n)) / 10 : null; };
+for (const s of await S.getRows({ actif: true })) await S.updateRow({ dispo_24h: await pct(s.id, 24), dispo_7j: await pct(s.id, 168), dispo_30j: await pct(s.id, 720) }, s.id, undefined, true);
+return true;`;
+    var ETAT_TILE = "etat";
+    var LIEN_BATTEMENT = `type === 'battement' ? (jeton ? '<div class="dzv-meta"><i class="fas fa-heartbeat"></i> Adresse \xE0 appeler par ta t\xE2che : <code>/dysizz-me/battement/' + String(jeton).replace(/[^a-z0-9]/g, '') + '</code></div>' : '<div class="dzv-meta">L\\'adresse de battement appara\xEEt apr\xE8s la premi\xE8re v\xE9rification</div>') : ''`;
     module2.exports = {
       key: "surveillance",
       label: "Surveillance",
       icon: "fas fa-heartbeat",
       group: "Syst\xE8me",
-      description: "Tes sites et services surveill\xE9s toutes les 5 minutes : en ligne, lent ou en panne, temps de r\xE9ponse en graphique, historique des incidents, certificats TLS qui expirent. Une seule alerte par incident, puis \xAB r\xE9tabli \xBB.",
+      description: "Tes sites, API, serveurs et domaines surveill\xE9s en profondeur : 13 types de sondes (site, sc\xE9nario d'API, port, DNS et ses changements, certificat, expiration du domaine, contenu modifi\xE9, liste noire, mail, Prometheus, battement de t\xE2ches cron, note de s\xE9curit\xE9 A-F), incidents avec dur\xE9e, disponibilit\xE9 24 h / 7 j / 30 j, page de statut publique, alertes sans spam par notification, ntfy ou Telegram.",
       depends: [],
-      setup: "<p>Ajoute tes sites (adresse compl\xE8te, ex. <code>https://monsite.fr</code>). Pour un service interne (base, SMTP\u2026), le bloc \xAB service joignable (TCP) \xBB de dysizz-flow peut \xEAtre ajout\xE9 au workflow.</p>",
+      setup: '<p>Ajoute des sondes dans la page Surveillance. Pour recevoir les alertes sur ton t\xE9l\xE9phone : <a href="/dysizz-me/reglages/surveillance">R\xE9gler Surveillance</a> (ntfy ou Telegram).</p>',
+      settings: {
+        intro: "Les alertes arrivent toujours en notification dans Saltcorn. Tu peux aussi les recevoir sur ton t\xE9l\xE9phone : <b>ntfy</b> (application gratuite, sans compte : choisis un nom de sujet difficile \xE0 deviner) ou <b>Telegram</b> (cr\xE9e un bot avec @BotFather, puis donne son jeton et ton identifiant de discussion).",
+        fields: [
+          { name: "ntfy_sujet", label: "ntfy \xB7 sujet", type: "text", placeholder: "ex. sidy-alertes-7f3k9", help: "Installe l'appli ntfy et abonne-toi \xE0 ce sujet. Vide = pas de ntfy." },
+          { name: "ntfy_serveur", label: "ntfy \xB7 serveur", type: "text", default: "https://ntfy.sh", help: "Ton propre serveur ntfy si tu en as un." },
+          { name: "telegram_chat", label: "Telegram \xB7 identifiant de discussion", type: "text", help: "Vide = pas de Telegram. Ton identifiant : \xE9cris \xE0 @userinfobot." },
+          { name: "telegram_jeton", label: "Telegram \xB7 jeton du bot", type: "password", secret: "TELEGRAM_BOT_TOKEN" },
+          { name: "page_publique", label: "Page de statut publique (/page/statut) visible sans connexion", type: "bool" }
+        ],
+        apply: [
+          { trigger: "surveillance_verifier", step: "ntfy", set: { sujet: (v) => v.ntfy_sujet || "", serveur: (v) => v.ntfy_serveur || "https://ntfy.sh" } },
+          { trigger: "surveillance_verifier", step: "telegram", set: { chat_id: (v) => v.telegram_chat || "" } }
+        ],
+        pageRoles: { statut: (v) => v.page_publique ? 100 : 80 },
+        test: { action: "dzf_ntfy", config: (v) => ({ serveur: v.ntfy_serveur || "https://ntfy.sh", sujet: v.ntfy_sujet, titre: "Test Surveillance", texte: "Si tu lis ceci, les alertes arrivent bien." }), ok: () => "Message de test envoy\xE9 sur ntfy." }
+      },
       tables: [
         {
           name: "surveillance_sites",
-          description: "Les sites et services surveill\xE9s",
+          description: "Les sondes : sites, API, serveurs, domaines\u2026",
           fields: [
             K.s("nom", "Nom", { required: true }),
-            K.s("url", "Adresse", { required: true, is_unique: true }),
+            K.opts("type", "Type de sonde", TYPES),
+            K.s("url", "Cible (adresse, domaine ou IP)", { required: true, is_unique: false }),
+            K.int("port", "Port"),
+            K.s("attendu", "Attendu / r\xE9glage"),
+            K.int("seuil", "Seuil"),
+            K.int("intervalle_min", "Toutes les (minutes)", { default: 5 }),
+            K.s("groupe", "Groupe"),
+            K.bool("publique", "Sur la page de statut"),
             K.bool("actif", "Surveill\xE9", { default: true }),
             K.s("etat", "\xC9tat"),
-            K.int("ms", "Temps de r\xE9ponse (ms)"),
+            K.int("ms", "Temps / valeur"),
             K.int("code_http", "Code HTTP"),
             K.s("raison", "Raison"),
             K.date("verifie_le", "V\xE9rifi\xE9 le"),
+            K.date("dernier_ok", "Dernier OK"),
+            K.s("jeton", "Jeton de battement"),
             K.int("tls_jours", "Certificat : jours restants"),
             K.date("tls_expire_le", "Certificat : expire le"),
             K.int("tls_alerte_jours", "Pr\xE9venir (jours avant l'expiration du certificat)", { default: 14 }),
+            K.s("note_secu", "Note de s\xE9curit\xE9"),
+            K.int("score", "Score de s\xE9curit\xE9"),
+            K.num("dispo_24h", "Dispo 24 h (%)"),
+            K.num("dispo_7j", "Dispo 7 j (%)"),
+            K.num("dispo_30j", "Dispo 30 j (%)"),
+            K.s("details", "D\xE9tails (JSON)"),
             K.s("note", "Note")
           ]
         },
-        { name: "surveillance_mesures", description: "Temps de r\xE9ponse (gard\xE9s 30 jours)", fields: [K.date("quand", "Quand"), K.s("site", "Site"), K.int("ms", "Temps (ms)")] },
-        { name: "surveillance_evenements", description: "Changements d'\xE9tat (incidents, retours \xE0 la normale)", fields: [K.date("quand", "Quand"), K.s("site", "Site"), K.s("etat", "\xC9tat"), K.s("message", "Message")] }
+        { name: "surveillance_mesures", description: "Chaque v\xE9rification (gard\xE9es 90 jours)", fields: [K.date("quand", "Quand"), K.s("site", "Sonde"), K.int("sonde", "Id de la sonde"), K.int("ms", "Temps (ms)"), K.bool("ok", "OK")] },
+        { name: "surveillance_evenements", description: "Incidents : d\xE9but, fin, dur\xE9e", fields: [K.date("quand", "Quand"), K.s("site", "Sonde"), K.int("sonde", "Id de la sonde"), K.s("etat", "\xC9tat"), K.s("message", "Message"), K.date("debut", "D\xE9but"), K.date("fin", "Fin"), K.int("duree_min", "Dur\xE9e (min)"), K.bool("ouvert", "En cours")] }
       ],
       views: [
-        K.edit("site_modifier", "surveillance_sites", [["nom", "Nom"], ["url", "Adresse"], ["actif", "Surveill\xE9"], ["tls_alerte_jours", "Pr\xE9venir (jours avant l'expiration du certificat)"], ["note", "Note", "textarea"]], { delete: true, title: "Site surveill\xE9", width: 560 }),
-        K.custom("surveillance_statut", "DZ Statut", "surveillance_sites", { champ_nom: "nom", champ_etat: "etat", champ_detail: "ms", unite: "ms", champ_date: "verifie_le", vue: "site_modifier", filtre: '{"actif":true}', texte_vide: "Ajoute un premier site \xE0 surveiller" }, "\xC9tat de chaque site"),
-        K.custom("surveillance_temps", "DZ Graphique", "surveillance_mesures", { champ_date: "quand", champ_valeur: "ms", calcul: "moyenne", champ_serie: "site", periode: "last7", pas: "heure", type: "courbe", format: "int", hauteur: 220, texte_vide: "Les temps de r\xE9ponse appara\xEEtront apr\xE8s les premi\xE8res v\xE9rifications" }, "Temps de r\xE9ponse moyen par heure, un trait par site"),
-        K.custom("surveillance_journal", "DZ Journal", "surveillance_evenements", { champ_date: "quand", champ_message: "message", champ_niveau: "etat", champ_source: "site", jours: 30, limite: 200, texte_vide: "Aucun incident sur 30 jours" }, "Incidents et retours \xE0 la normale"),
+        K.edit("site_modifier", "surveillance_sites", [["nom", "Nom"], ["type", "Type de sonde"], ["url", "Cible (adresse, domaine ou IP)"], ["port", "Port (tcp, tls)"], ["attendu", "Attendu / r\xE9glage", "textarea"], ["seuil", "Seuil (ms, jours, minutes ou valeur max selon le type)"], ["intervalle_min", "V\xE9rifier toutes les (minutes)"], ["groupe", "Groupe"], ["publique", "Afficher sur la page de statut"], ["actif", "Surveill\xE9"], ["note", "Note", "textarea"]], { delete: true, title: "Sonde", width: 640 }),
+        K.show("sonde_fiche", "surveillance_sites", K.box(
+          "dzv-mail",
+          K.box(
+            "dzv-mail-head",
+            K.box("dzv-mail-title", K.field("nom", "as_text")),
+            K.meta(K.field("type", "as_text"), K.field("url", "as_text"), K.field("etat", "as_text"), K.dateFr("verifie_le", { time: true })),
+            K.box("dzv-tile-actions", K.modalLink("site_modifier", "Modifier"))
+          ),
+          K.box("dzv-kv", K.meta(K.text("Dispo 24 h"), K.field("dispo_24h", "show"), K.text("7 j"), K.field("dispo_7j", "show"), K.text("30 j"), K.field("dispo_30j", "show"))),
+          K.field("raison", "as_text", { block: true }),
+          K.formula(LIEN_BATTEMENT, { html: true }),
+          K.formula(`note_secu ? '<div class="dzv-meta">Note de s\xE9curit\xE9 : <b>' + String(note_secu).replace(/[^A-F]/g, '') + '</b> (' + (score || 0) + '/100)</div>' : ''`, { html: true }),
+          K.formula(`details ? '<pre class="dzv-code-small">' + String(details).replace(/&/g, '&amp;').replace(/</g, '&lt;').slice(0, 4000) + '</pre>' : ''`, { html: true })
+        ), { title: "Sonde", width: 760 }),
+        K.custom("surveillance_statut", "DZ Statut", "surveillance_sites", { champ_nom: "nom", champ_etat: ETAT_TILE, champ_detail: "raison", champ_date: "verifie_le", vue: "sonde_fiche", filtre: '{"actif":true}', texte_vide: "Ajoute une premi\xE8re sonde" }, "\xC9tat de chaque sonde"),
+        K.custom("surveillance_dispo", "DZ Disponibilit\xE9", "surveillance_mesures", { champ_date: "quand", champ_ok: "ok", champ_groupe: "site", jours: 30, texte_vide: "La disponibilit\xE9 appara\xEEt apr\xE8s les premi\xE8res v\xE9rifications" }, "Disponibilit\xE9 jour par jour sur 30 jours"),
+        K.custom("statut_public", "DZ Disponibilit\xE9", "surveillance_mesures", { champ_date: "quand", champ_ok: "ok", champ_groupe: "site", jours: 90, groupes_table: "surveillance_sites", groupes_champ: "nom", groupes_filtre: '{"publique":true}', texte_vide: "Pas encore de donn\xE9es" }, "Page de statut : 90 jours"),
+        K.custom("surveillance_temps", "DZ Graphique", "surveillance_mesures", { champ_date: "quand", champ_valeur: "ms", calcul: "moyenne", champ_serie: "site", periode: "last7", pas: "heure", type: "courbe", format: "int", hauteur: 220, filtre: '{"ok":true}', texte_vide: "Les temps de r\xE9ponse appara\xEEtront apr\xE8s les premi\xE8res v\xE9rifications" }, "Temps de r\xE9ponse moyen par heure"),
+        K.custom("surveillance_journal", "DZ Journal", "surveillance_evenements", { champ_date: "quand", champ_message: "message", champ_niveau: "etat", champ_source: "site", champ_detail: "duree_min", unite: "min", jours: 30, limite: 200, texte_vide: "Aucun incident sur 30 jours" }, "Incidents et retours \xE0 la normale"),
         K.list("sites_liste", "surveillance_sites", [
-          ["Site", K.field("nom", "as_text")],
-          ["Adresse", K.field("url", "as_text")],
-          ["\xC9tat", K.field("etat", "as_text", { cls: "dzv-pill" })],
-          ["Temps", K.field("ms", "show")],
-          ["Certificat", K.formula(TLS_FML, { html: true, block: false })],
-          ["Surveill\xE9", K.field("actif", "show")]
-        ], { order: "nom", desc: false, rowClick: "`/view/site_modifier?id=${id}`", limit: 100, description: "Tous les sites" })
+          ["Sonde", K.field("nom", "as_text")],
+          ["Type", K.field("type", "as_text")],
+          ["Cible", K.field("url", "as_text")],
+          ["\xC9tat", K.field("etat", "as_text")],
+          ["24 h", K.field("dispo_24h", "show")],
+          ["30 j", K.field("dispo_30j", "show")],
+          ["S\xE9cu", K.field("note_secu", "as_text")]
+        ], { order: "nom", desc: false, rowClick: "`/view/sonde_fiche?id=${id}`", limit: 200, description: "Toutes les sondes" })
       ],
       triggers: [
-        K.wf("surveillance_verifier", "Often", null, "Toutes les ~5 min : appelle chaque site, note l'\xE9tat et le temps, garde l'historique, pr\xE9vient une fois par incident", [
-          K.st("verrou", "dzf_verrou", { action: "prendre", nom: "me-surveillance", duree: 240, sortie: "verrou" }, { next_step: 'verrou ? "sites" : ""' }),
-          K.st("sites", "dzf_table_chercher", { table: "surveillance_sites", filtre: K.J({ actif: true }), tri: "id", limite: 500, sortie: "sites" }),
-          K.st("appeler", "dzf_ping_http", { cibles: "{{sites}}", lent_ms: 2e3, delai_s: 10, en_parallele: 8, sortie: "resultats", delai_max: 120 }, { only_if: "sites.length > 0" }),
-          K.st("preparer", "dzf_code", { code: PREPARER, sortie: "p" }, { only_if: "sites.length > 0" }),
-          K.st("ranger", "dzf_table_upsert", { table: "surveillance_sites", liste: "{{p.maj}}", cle: "id", mettre_a_jour: "etat,ms,code_http,raison,verifie_le", sans_declencheurs: true, sortie: "bilan" }, { only_if: "sites.length > 0" }),
-          K.st("mesures", "dzf_table_ajouter", { table: "surveillance_mesures", liste: "{{p.mesures}}", sans_declencheurs: true, sortie: "mesures" }, { only_if: "sites.length > 0" }),
-          K.st("evenements", "dzf_table_ajouter", { table: "surveillance_evenements", liste: "{{p.evenements}}", sortie: "evenements" }, { only_if: "sites.length > 0 && p.evenements.length > 0" }),
-          K.st("alerte", "dzf_alerte", { cle: "me-sites", probleme: "{{p.pannes}}", silence_min: 60, sortie: "alerte" }, { only_if: "sites.length > 0" }),
-          K.st("prevenir", "dzf_notifier", { qui: "administrateurs", titre: "Surveillance : {{alerte.etat}}", texte: "{{p.texte}}", lien: "/page/surveillance", sortie: "notifies" }, { only_if: "sites.length > 0 && alerte.envoyer" }),
+        K.wf("surveillance_verifier", "Often", null, "Toutes les ~5 min : v\xE9rifie les sondes dues, note mesures et incidents, pr\xE9vient une fois par incident (notification, ntfy, Telegram)", [
+          K.st("verrou", "dzf_verrou", { action: "prendre", nom: "me-surveillance", duree: 280, sortie: "verrou" }, { next_step: 'verrou ? "verifier" : ""' }),
+          K.st("verifier", "dzf_code", { code: VERIFIER, sortie: "v", delai_max: 270 }),
+          K.st("prevenir", "dzf_notifier", { qui: "administrateurs", titre: "Surveillance", texte: "{{v.texte}}", lien: "/page/surveillance", sortie: "notifies" }, { only_if: "v && v.alertes.length > 0" }),
+          K.st("ntfy", "dzf_ntfy", { serveur: "https://ntfy.sh", sujet: "", titre: "Surveillance", texte: "{{v.texte}}", priorite: "high", si_erreur: "continuer", sortie: "ntfy" }, { only_if: "v && v.alertes.length > 0" }),
+          K.st("telegram", "dzf_telegram", { variable_jeton: "TELEGRAM_BOT_TOKEN", chat_id: "", texte: "Surveillance\n{{v.texte}}", si_erreur: "continuer", sortie: "tg" }, { only_if: "v && v.alertes.length > 0" }),
           K.st("liberer", "dzf_verrou", { action: "lib\xE9rer", nom: "me-surveillance", sortie: "verrou_libre" })
-        ], { appeler: ["lent_ms", "delai_s"], alerte: ["silence_min"] }),
-        K.wf("surveillance_certificats", "Daily", null, "Chaque jour : v\xE9rifie le certificat TLS de chaque site en https et pr\xE9vient avant qu'il expire", [
-          K.st("sites", "dzf_table_chercher", { table: "surveillance_sites", filtre: K.J({ actif: true, url: { ilike: "https://" } }), tri: "id", limite: 500, sortie: "sites" }),
-          K.st("tls", "dzf_certificat_tls", { hotes: "{{sites}}", port: 443, sortie: "tls", delai_max: 180, si_erreur: "continuer" }, { only_if: "sites.length > 0" }),
-          K.st("preparer", "dzf_code", { code: TLS, sortie: "c" }, { only_if: "sites.length > 0 && tls" }),
-          K.st("ranger", "dzf_table_upsert", { table: "surveillance_sites", liste: "{{c.maj}}", cle: "id", mettre_a_jour: "tls_jours,tls_expire_le", sans_declencheurs: true, sortie: "bilan" }, { only_if: "sites.length > 0 && tls" }),
-          K.st("prevenir", "dzf_notifier", { qui: "administrateurs", titre: "Certificat(s) bient\xF4t expir\xE9(s)", texte: "{{c.texte}}", lien: "/page/surveillance", sortie: "notifies" }, { only_if: "sites.length > 0 && tls && c.bientot.length > 0" })
+        ], { ntfy: ["sujet", "serveur"], telegram: ["chat_id"] }),
+        K.wf("surveillance_dispo", "Hourly", null, "Chaque heure : disponibilit\xE9 de chaque sonde sur 24 h, 7 j et 30 j", [
+          K.st("calcul", "dzf_code", { code: DISPO, sortie: "dispo", delai_max: 120 })
         ]),
-        K.wf("surveillance_menage", "Weekly", null, "Chaque semaine : garde 30 jours de temps de r\xE9ponse et 180 jours d'incidents", [
-          K.st("mesures", "dzf_nettoyer", { table: "surveillance_mesures", champ_date: "quand", jours: 30, sortie: "mesures_supprimees" }),
-          K.st("evenements", "dzf_nettoyer", { table: "surveillance_evenements", champ_date: "quand", jours: 180, sortie: "evenements_supprimes" })
+        K.wf("surveillance_menage", "Weekly", null, "Chaque semaine : garde 90 jours de mesures et un an d'incidents", [
+          K.st("mesures", "dzf_nettoyer", { table: "surveillance_mesures", champ_date: "quand", jours: 90, sortie: "mesures_supprimees" }),
+          K.st("evenements", "dzf_nettoyer", { table: "surveillance_evenements", champ_date: "quand", jours: 365, sortie: "evenements_supprimes" })
         ])
       ],
-      seedMerge: { surveillance_sites: "url" },
+      seedMerge: { surveillance_sites: "nom" },
       seeds: {
-        surveillance_sites: [{ nom: "AMBS Agency", url: "https://ambs-agency.com", actif: true, tls_alerte_jours: 14 }]
-      },
-      pages: [{
-        name: "surveillance",
-        title: "Surveillance",
-        quick: { label: "Site", url: "/view/site_modifier" },
-        content: [
-          K.view("surveillance_statut"),
-          K.grid(
-            "dzv-grid-2",
-            K.panel("Temps de r\xE9ponse", "fas fa-chart-line", K.view("surveillance_temps")),
-            K.panel("Incidents", "fas fa-stream", K.view("surveillance_journal"))
-          ),
-          K.panel("Tous les sites", "fas fa-list", K.view("sites_liste"), { actions: K.modalBtn("Ajouter", "/view/site_modifier") })
+        surveillance_sites: [
+          { nom: "AMBS Agency", type: "http", url: "https://ambs-agency.com", actif: true, intervalle_min: 5, seuil: 2e3, groupe: "Sites", publique: false },
+          { nom: "AMBS \xB7 domaine", type: "domaine", url: "ambs-agency.com", actif: true, intervalle_min: 1440, seuil: 30, groupe: "Domaines", publique: false },
+          { nom: "AMBS \xB7 mail (SPF/DMARC)", type: "mail", url: "ambs-agency.com", actif: true, intervalle_min: 1440, groupe: "Domaines", publique: false },
+          { nom: "AMBS \xB7 s\xE9curit\xE9", type: "securite", url: "https://ambs-agency.com", actif: true, intervalle_min: 1440, groupe: "S\xE9curit\xE9", publique: false }
         ]
-      }],
-      nav: [{ page: "surveillance", label: "Surveillance", icon: "fas fa-heartbeat", group: "Syst\xE8me", order: 10, keywords: "sites uptime panne serveur monitoring certificat tls" }],
-      quick: [{ label: "Surveiller un site", icon: "fas fa-heartbeat", url: "/view/site_modifier", keywords: "uptime monitoring" }],
+      },
+      pages: [
+        {
+          name: "surveillance",
+          title: "Surveillance",
+          quick: { label: "Sonde", url: "/view/site_modifier" },
+          content: [
+            K.view("surveillance_statut"),
+            K.panel("Disponibilit\xE9 sur 30 jours", "fas fa-signal", K.view("surveillance_dispo")),
+            K.grid(
+              "dzv-grid-2",
+              K.panel("Temps de r\xE9ponse", "fas fa-chart-line", K.view("surveillance_temps")),
+              K.panel("Incidents", "fas fa-stream", K.view("surveillance_journal"))
+            ),
+            K.panel("Toutes les sondes", "fas fa-list", K.view("sites_liste"), { actions: `${K.modalBtn("Ajouter", "/view/site_modifier")}<a class="dz-btn dz-btn-sm dz-btn-ghost" href="/page/statut" target="_blank"><i class="fas fa-external-link-alt"></i>Page de statut</a>` }),
+            K.text(`<details class="dzv-panel dzv-help"><summary><i class="fas fa-question-circle"></i> Les 13 types de sondes</summary><ul>${Object.entries(TYPE_AIDE).map(([k, v]) => `<li><code>${k}</code> \u2014 ${v}</li>`).join("")}</ul></details>`)
+          ]
+        },
+        {
+          name: "statut",
+          title: "Statut des services",
+          shell: false,
+          min_role: 80,
+          content: [K.text('<div class="dzv-statuspage"><h1>Statut des services</h1><p class="dzv-muted">Disponibilit\xE9 des 90 derniers jours.</p></div>'), K.view("statut_public")]
+        }
+      ],
+      nav: [{ page: "surveillance", label: "Surveillance", icon: "fas fa-heartbeat", group: "Syst\xE8me", order: 10, keywords: "sites uptime panne serveur monitoring certificat tls domaine s\xE9curit\xE9 api" }],
+      quick: [{ label: "Nouvelle sonde", icon: "fas fa-heartbeat", url: "/view/site_modifier", keywords: "uptime monitoring surveiller" }],
       explain: [
-        ["Toutes les 5 minutes", "Le workflow \xAB surveillance_verifier \xBB : Verrou (une seule ex\xE9cution \xE0 la fois) \u2192 Table : chercher les sites \u2192 Surveillance : site en ligne ? (en parall\xE8le) \u2192 Code (ce qui a chang\xE9) \u2192 Table : ajouter ou mettre \xE0 jour \u2192 Table : ajouter (mesures, incidents) \u2192 Alerte (sans spam) \u2192 Notifier."],
-        ["Une seule alerte", "Le bloc \xAB Alerte (sans spam) \xBB ne pr\xE9vient qu'une fois par heure tant que la panne dure, puis une fois quand tout est r\xE9tabli."],
-        ["Le graphique", "Vue \xAB surveillance_temps \xBB (DZ Graphique) : moyenne par heure des temps de la table surveillance_mesures, un trait par site. Le regroupement est fait par la base."],
-        ["Les certificats", "Le workflow \xAB surveillance_certificats \xBB (chaque jour) lit le certificat TLS de chaque site en https, range le nombre de jours restants et pr\xE9vient avant l'expiration."],
-        ["Le m\xE9nage", "\xAB surveillance_menage \xBB (chaque semaine) garde 30 jours de mesures et 180 jours d'incidents, pour que les tables restent l\xE9g\xE8res."]
+        ["Toutes les 5 minutes", "Le workflow \xAB surveillance_verifier \xBB prend les sondes dues (chacune a son intervalle), appelle pour chacune le bon bloc dysizz-flow (site, sc\xE9nario d'API, port, DNS, certificat, domaine, contenu, liste noire, mail, Prometheus, battement, note de s\xE9curit\xE9), 6 \xE0 la fois."],
+        ["Incidents", "Une panne ouvre un incident dans \xAB surveillance_evenements \xBB ; le retour \xE0 la normale le ferme avec sa dur\xE9e."],
+        ["Une seule alerte", "Le bloc \xAB Alerte (sans spam) \xBB par sonde : une alerte \xE0 la panne, un rappel toutes les heures au plus, puis \xAB r\xE9tabli \xBB. Envoy\xE9e en notification, et sur ntfy / Telegram si r\xE9gl\xE9s."],
+        ["Disponibilit\xE9", "\xAB surveillance_dispo \xBB calcule chaque heure le % de v\xE9rifications r\xE9ussies sur 24 h, 7 j et 30 j ; la vue DZ Disponibilit\xE9 dessine une barre par jour."],
+        ["Battement", "Pour une t\xE2che cron : cr\xE9e une sonde de type battement, puis fais appeler par ta t\xE2che l'adresse affich\xE9e (curl). Sans nouvelles depuis \xAB seuil \xBB minutes : panne."],
+        ["Page de statut", "/page/statut montre les sondes marqu\xE9es \xAB page de statut \xBB. Elle devient publique si tu le coches dans R\xE9gler Surveillance."]
       ]
     };
   }
@@ -2585,6 +2750,16 @@ var require_admin = __commonJS({
       const m = modOf(req);
       if (!m) return res.json({ ok: false, message: "module inconnu" });
       return settings.test(req, res, m);
+    };
+    var battement = async (req, res) => {
+      res.setHeader("Cache-Control", "no-store");
+      const jeton = String(req.params.jeton || "");
+      if (!/^[a-z0-9]{16,64}$/.test(jeton)) return res.status(404).json({ ok: false });
+      const T = require("@saltcorn/data/models/table").findOne({ name: "surveillance_sites" });
+      const s = T && await T.getRow({ jeton, type: "battement" });
+      if (!s) return res.status(404).json({ ok: false });
+      await T.updateRow({ dernier_ok: /* @__PURE__ */ new Date(), etat: "ok", raison: "signal re\xE7u" }, s.id, void 0, true);
+      res.json({ ok: true });
     };
     var etat = async (req, res) => {
       res.setHeader("Cache-Control", "no-store");
@@ -2734,7 +2909,7 @@ ${form(req, `/dysizz-me/uninstall/${m.key}?drop=1`, `<input name="confirm" place
         go(res, `/dysizz-me/m/${m.key}`, m.key, e.message, true);
       }
     };
-    module2.exports = { etat, settingsPage, settingsSave, settingsTest, home, detail, install, installAll, uninstall };
+    module2.exports = { battement, etat, settingsPage, settingsSave, settingsTest, home, detail, install, installAll, uninstall };
   }
 });
 
@@ -2817,6 +2992,9 @@ module.exports = {
     { url: "/dysizz-me/install-all", method: "post", callback: admin.installAll },
     { url: "/dysizz-me/uninstall/:key", method: "post", callback: admin.uninstall },
     { url: "/dysizz-me/etat", method: "get", callback: admin.etat },
+    { url: "/dysizz-me/battement/:jeton", method: "get", callback: admin.battement },
+    { url: "/dysizz-me/battement/:jeton", method: "post", noCsrf: true, callback: admin.battement },
+    { url: "/dysizz-me/battement/", method: "post", noCsrf: true, callback: (req, res) => res.status(404).json({ ok: false }) },
     { url: "/dysizz-me/reglages/:key", method: "get", callback: admin.settingsPage },
     { url: "/dysizz-me/reglages/:key", method: "post", callback: admin.settingsSave },
     { url: "/dysizz-me/reglages/:key/tester", method: "post", callback: admin.settingsTest }

@@ -55,6 +55,7 @@ const applyToWorkflows = async (mod, v) => {
     }
     for (const [k, x] of Object.entries(a.set || {})) c[k] = typeof x === "function" ? x(v) : x;
     await s.update({ configuration: c });
+    await require("./installer").restamp(mod.key, a.trigger);
     done.push(`${a.trigger} → ${a.step}`);
   }
   return done;
@@ -142,6 +143,11 @@ const save = async (req, res, mod) => {
     const cfg = await getCfg();
     await saveCfg({ settings: { ...(cfg.settings || {}), [mod.key]: out } });
     const done = await applyToWorkflows(mod, out);
+    for (const [pg, fn] of Object.entries(mod.settings.pageRoles || {})) {
+      const Page = require("@saltcorn/data/models/page");
+      const pp = Page.findOne({ name: pg });
+      if (pp) await Page.update(pp.id, { min_role: fn(out) });
+    }
     back("ok", `Réglages enregistrés${done.length ? " et appliqués aux workflows" : ""}. ${mod.settings.after || ""}`);
   } catch (e) { back("err", e.message); }
 };
@@ -163,7 +169,7 @@ const test = async (req, res, mod) => {
   }
   try {
     const r = await Promise.race([action.run({ configuration: { ...T.config(v), sortie: "r", delai_max: 40 }, row: {}, user: req.user, req, mode: "workflow" }), new Promise((_, rej) => setTimeout(() => rej(new Error("pas de réponse après 45 s")), 45000))]);
-    reply(true, T.ok ? T.ok(r && r.r, v) : "Ça marche.");
+    reply(true, T.ok ? T.ok(T.okFull ? r : r && r.r, v) : "Ça marche.");
   } catch (e) {
     reply(false, (T.explain ? T.explain(e.message) : "") || `Échec : ${e.message}`);
   }

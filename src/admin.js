@@ -20,6 +20,18 @@ const modOf = (req) => MODULES.find((x) => x.key === req.params.key && x.setting
 const settingsPage = async (req, res) => { if (!isAdmin(req)) return denied(res); const m = modOf(req); if (!m) return res.redirect("/dysizz-me"); return settings.page(req, res, m); };
 const settingsSave = async (req, res) => { if (!isAdmin(req)) return denied(res); const m = modOf(req); if (!m) return res.redirect("/dysizz-me"); return settings.save(req, res, m); };
 const settingsTest = async (req, res) => { if (!isAdmin(req)) return res.status(403).json({ ok: false, message: "réservé aux admins" }); const m = modOf(req); if (!m) return res.json({ ok: false, message: "module inconnu" }); return settings.test(req, res, m); };
+/* battement : une tâche cron appelle /dysizz-me/battement/<jeton> (GET ou POST, sans connexion) */
+const battement = async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  const jeton = String(req.params.jeton || "");
+  if (!/^[a-z0-9]{16,64}$/.test(jeton)) return res.status(404).json({ ok: false });
+  const T = require("@saltcorn/data/models/table").findOne({ name: "surveillance_sites" });
+  const s = T && (await T.getRow({ jeton, type: "battement" }));
+  if (!s) return res.status(404).json({ ok: false });
+  await T.updateRow({ dernier_ok: new Date(), etat: "ok", raison: "signal reçu" }, s.id, undefined, true);
+  res.json({ ok: true });
+};
+
 /* pour la coquille des pages : ce module a-t-il besoin d'être réglé ? (admins seulement) */
 const etat = async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
@@ -174,4 +186,4 @@ const uninstall = async (req, res) => {
   }
 };
 
-module.exports = { etat, settingsPage, settingsSave, settingsTest, home, detail, install, installAll, uninstall };
+module.exports = { battement, etat, settingsPage, settingsSave, settingsTest, home, detail, install, installAll, uninstall };
