@@ -1,4 +1,4 @@
-/* dysizz-me 2.0.0 — FICHIER GÉNÉRÉ par tools/build.mjs depuis src/. Ne pas modifier à la main. */
+/* dysizz-me 2.1.0 — FICHIER GÉNÉRÉ par tools/build.mjs depuis src/. Ne pas modifier à la main. */
 "use strict";
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __commonJS = (cb, mod) => function __require() {
@@ -10,7 +10,7 @@ var require_core = __commonJS({
   "../src/core.js"(exports2, module2) {
     "use strict";
     var PLUGIN2 = "dysizz-me";
-    var VERSION = true ? "2.0.0" : "dev";
+    var VERSION = true ? "2.1.0" : "dev";
     var isAdmin = (req) => !!(req && req.user && req.user.role_id === 1);
     var esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
     var denied = (res) => res.status(403).send("R\xE9serv\xE9 aux administrateurs");
@@ -221,7 +221,8 @@ var require_shell = __commonJS({
 <div class="dzv-top-actions">
   ${quick ? `<a class="dz-btn dz-btn-primary dz-btn-sm" href="javascript:ajax_modal('${esc(quick.url)}')"><i class="fas fa-plus"></i><span class="dzv-hide-sm">${esc(quick.label)}</span></a>` : ""}
   <button class="dz-btn dz-btn-ghost dz-icon-btn" type="button" data-dz-cmdk-open aria-label="Rechercher"><i class="fas fa-search"></i></button>
-</div>`;
+</div>
+<div class="dzv-setup-hint" hidden></div><script>(function(){var el=document.currentScript.previousElementSibling;fetch("/dysizz-me/etat?page="+encodeURIComponent(location.pathname.split("/").pop()),{credentials:"same-origin"}).then(function(r){return r.ok?r.json():null}).then(function(j){if(!j||!j.hint)return;var t=document.createElement("span");t.textContent=j.hint;el.innerHTML='<i class="fas fa-sliders-h"></i>';el.appendChild(t);var a=document.createElement("a");a.className="dz-btn dz-btn-primary dz-btn-sm";a.href=j.url;a.textContent="R\xE9gler maintenant";el.appendChild(a);el.hidden=false}).catch(function(){})})();</script>`;
     var bottomHtml = (items, current) => {
       const main = items.filter((i) => i.mobile).slice(0, 4);
       return main.map((i) => `<a href="/page/${esc(i.page)}"${i.page === current ? ' class="dz-active"' : ""}><i class="${esc(i.icon)}"></i>${esc(i.short || i.label)}</a>`).join("") + `<a href="#" data-dz-open="#dzv-drawer"><i class="fas fa-th-large"></i>Plus</a>`;
@@ -294,6 +295,173 @@ ${quick.map((q) => `<a href="javascript:ajax_modal('${esc(q.url)}')" data-keywor
       return touched;
     };
     module2.exports = { shellLayout, refreshShell, navItems, GROUPS };
+  }
+});
+
+// ../src/settings.js
+var require_settings = __commonJS({
+  "../src/settings.js"(exports2, module2) {
+    "use strict";
+    var { esc } = require_core();
+    var flowApi = () => {
+      try {
+        const p = require("@saltcorn/data/db/state").getState().plugins["dysizz-flow"];
+        return p && p.dysizz_flow_api;
+      } catch (e) {
+        return null;
+      }
+    };
+    var hasSecret = async (name) => {
+      if (process.env[name]) return "env";
+      const api = flowApi();
+      try {
+        return api && await api.hasSecret(name) ? "coffre" : "";
+      } catch (e) {
+        return "";
+      }
+    };
+    var values = async (mod, cfg) => ({ ...Object.fromEntries((mod.settings.fields || []).filter((f) => !f.secret).map((f) => [f.name, f.default ?? ""])), ...((cfg || {}).settings || {})[mod.key] || {} });
+    var configured = async (mod, cfg) => {
+      if (!mod.settings) return true;
+      const v = await values(mod, cfg);
+      for (const f of mod.settings.fields || []) {
+        if (!f.required) continue;
+        if (f.secret ? !await hasSecret(f.secret) : !String(v[f.name] ?? "").trim()) return false;
+      }
+      return true;
+    };
+    var applyToWorkflows = async (mod, v) => {
+      const Trigger = require("@saltcorn/data/models/trigger");
+      const WorkflowStep = require("@saltcorn/data/models/workflow_step");
+      const done = [];
+      for (const a of mod.settings.apply || []) {
+        const t = Trigger.findOne({ name: a.trigger });
+        if (!t) continue;
+        const s = (await WorkflowStep.find({ trigger_id: t.id })).find((x) => x.name === a.step);
+        if (!s) continue;
+        const c = { ...s.configuration || {} };
+        if (a.json) {
+          let o = {};
+          try {
+            o = typeof c[a.json] === "string" ? JSON.parse(c[a.json] || "{}") : c[a.json] || {};
+          } catch (e) {
+            o = {};
+          }
+          for (const [k, f] of Object.entries(a.map || {})) o[k] = typeof f === "function" ? f(v) : v[f];
+          c[a.json] = JSON.stringify(o);
+        }
+        for (const [k, x] of Object.entries(a.set || {})) c[k] = typeof x === "function" ? x(v) : x;
+        await s.update({ configuration: c });
+        done.push(`${a.trigger} \u2192 ${a.step}`);
+      }
+      return done;
+    };
+    var inputHtml = (f, v, secretState) => {
+      const id = `s_${f.name}`;
+      const help = f.help ? `<small>${f.help}</small>` : "";
+      if (f.type === "bool") return `<label class="dzs-check"><input type="checkbox" name="${esc(f.name)}" ${v === true || v === "on" || v === "true" ? "checked" : ""}> ${esc(f.label)}</label>${help}`;
+      let input;
+      if (f.type === "select") input = `<select class="form-select" id="${id}" name="${esc(f.name)}">${(f.options || []).map(([ov, ol]) => `<option value="${esc(ov)}"${String(ov) === String(v) ? " selected" : ""}>${esc(ol)}</option>`).join("")}</select>`;
+      else if (f.type === "password") input = `<input class="form-control" type="password" id="${id}" name="${esc(f.name)}" autocomplete="new-password" placeholder="${secretState ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022 (d\xE9j\xE0 rang\xE9, laisse vide pour garder)" : ""}">`;
+      else input = `<input class="form-control" type="${f.type === "email" ? "email" : f.type === "number" ? "number" : "text"}" id="${id}" name="${esc(f.name)}" value="${esc(v ?? "")}"${f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : ""}>`;
+      const badge = f.type === "password" ? secretState === "env" ? '<span class="dzs-b ok">variable du serveur</span>' : secretState ? '<span class="dzs-b ok">rang\xE9 dans le coffre</span>' : '<span class="dzs-b">pas encore rang\xE9</span>' : "";
+      return `<label for="${id}">${esc(f.label)}${f.required ? ' <span class="req">*</span>' : ""} ${badge}</label>${input}${help}`;
+    };
+    var CSS = `.dzs{max-width:760px;margin:0 auto}.dzs h1{font-weight:750;letter-spacing:-.02em;display:flex;gap:.7rem;align-items:center}
+.dzs-card{border:1px solid var(--dzv-border,#ddd);border-radius:16px;background:var(--dzv-surface,#fff);padding:1.3rem 1.4rem;display:flex;flex-direction:column;gap:1rem}
+.dzs-f{display:flex;flex-direction:column;gap:.3rem}.dzs-f label{font-weight:650;font-size:.9rem}.dzs-f small{color:var(--dzv-mute,#777);font-size:.8rem}.dzs-f .req{color:#e5484d}
+.dzs-check{display:flex!important;gap:.5rem;align-items:center;font-weight:500!important}
+.dzs-b{font:600 .68rem ui-monospace,monospace;text-transform:uppercase;padding:.12rem .45rem;border-radius:6px;background:var(--dzv-surface-2,#eee);color:var(--dzv-mute,#777);margin-left:.3rem}.dzs-b.ok{background:rgba(48,164,108,.15);color:#1f8a57}
+.dzs-intro{color:var(--dzv-soft,#555);line-height:1.6}.dzs-bar{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+.dzs-res{padding:.8rem 1rem;border-radius:12px;font-size:.9rem;display:none}.dzs-res.ok{display:block;background:rgba(48,164,108,.12);color:#1f7a4d}.dzs-res.ko{display:block;background:rgba(229,72,77,.1);color:#c0343a}
+.dzs-steps{counter-reset:s;list-style:none;padding:0;display:flex;flex-direction:column;gap:.6rem}.dzs-steps li{display:flex;gap:.7rem;align-items:flex-start}
+.dzs-steps li::before{counter-increment:s;content:counter(s);width:26px;height:26px;border-radius:50%;background:var(--dzv-primary,#5b5bf0);color:#fff;display:grid;place-items:center;font-weight:700;font-size:.8rem;flex:none}
+.dzs-flash{padding:.8rem 1rem;border-radius:12px;margin-bottom:1rem}.dzs-flash.ok{background:rgba(48,164,108,.12)}.dzs-flash.ko{background:rgba(229,72,77,.1)}`;
+    var page = async (req, res, mod) => {
+      const { getCfg } = require_installer();
+      const cfg = await getCfg();
+      const v = await values(mod, cfg);
+      const S = mod.settings;
+      const secretStates = {};
+      for (const f of S.fields) if (f.secret) secretStates[f.name] = await hasSecret(f.secret);
+      const q = req.query || {};
+      const csrf = req.csrfToken ? req.csrfToken() : "";
+      const installed = (cfg.installed || []).includes(mod.key);
+      const html = `<style>${CSS}</style><div class="dzs">
+<p><a href="/dysizz-me">\u2190 Modules de Me</a></p>
+<h1><i class="${esc(mod.icon)}"></i> R\xE9gler ${esc(mod.label)}</h1>
+${q.ok ? `<div class="dzs-flash ok">${esc(q.ok)}</div>` : ""}${q.err ? `<div class="dzs-flash ko">${esc(q.err)}</div>` : ""}
+${!installed ? `<div class="dzs-flash ko">Ce module n'est pas encore install\xE9 : installe-le depuis la page des modules, puis reviens ici.</div>` : ""}
+${!flowApi() && S.fields.some((f) => f.secret) ? `<div class="dzs-flash ko">Le coffre de dysizz-flow est introuvable : mets \xE0 jour dysizz-flow (2.1 ou plus) pour ranger les mots de passe ici.</div>` : ""}
+<form class="dzs-card" method="post" action="/dysizz-me/reglages/${esc(mod.key)}" id="dzs-form" autocomplete="off">
+<input type="hidden" name="_csrf" value="${esc(csrf)}">
+${S.intro ? `<div class="dzs-intro">${S.intro}</div>` : ""}
+${S.fields.map((f) => `<div class="dzs-f">${inputHtml(f, v[f.name], secretStates[f.name])}</div>`).join("")}
+<div class="dzs-res" id="dzs-res"></div>
+<div class="dzs-bar">${S.test ? `<button type="button" class="btn btn-outline-secondary" id="dzs-test"><i class="fas fa-plug"></i> Tester</button>` : ""}
+<button class="btn btn-primary"><i class="fas fa-check"></i> Enregistrer</button>
+${installed && (mod.pages || [])[0] ? `<a class="btn btn-link" href="/page/${esc(mod.pages[0].name)}">Ouvrir ${esc(mod.label)}</a>` : ""}</div>
+<small style="color:var(--dzv-mute,#777)">Les mots de passe sont chiffr\xE9s dans le coffre de dysizz-flow et ne sont plus jamais r\xE9affich\xE9s.</small>
+</form></div>
+<script>(function(){var b=document.getElementById("dzs-test");if(!b)return;b.addEventListener("click",function(){var f=document.getElementById("dzs-form"),r=document.getElementById("dzs-res");r.className="dzs-res ok";r.textContent="Test en cours\u2026";b.disabled=true;
+fetch("/dysizz-me/reglages/${esc(mod.key)}/tester",{method:"POST",credentials:"same-origin",headers:{"CSRF-Token":${JSON.stringify(csrf)}},body:new URLSearchParams(new FormData(f))}).then(function(x){return x.json()}).then(function(j){b.disabled=false;r.className="dzs-res "+(j.ok?"ok":"ko");r.textContent=j.message}).catch(function(e){b.disabled=false;r.className="dzs-res ko";r.textContent=e.message})})})();</script>`;
+      res.sendWrap({ title: `R\xE9gler ${mod.label}`, requestFluidLayout: false }, { above: [{ type: "blank", isHTML: true, contents: html.replace(/\{\{/g, "&#123;&#123;").replace(/\}\}/g, "&#125;&#125;") }] });
+    };
+    var readForm = (mod, body) => {
+      const out = {}, secrets = {};
+      for (const f of mod.settings.fields) {
+        let x = body[f.name];
+        if (f.type === "bool") x = x === "on" || x === "true" || x === true;
+        else x = String(x ?? "").trim();
+        if (f.type === "number" && x !== "") x = Number(x);
+        if (f.secret) {
+          if (x) secrets[f.secret] = x;
+        } else out[f.name] = x;
+      }
+      return { out, secrets };
+    };
+    var save = async (req, res, mod) => {
+      const { getCfg, saveCfg } = require_installer();
+      const back = (k, m) => res.redirect(`/dysizz-me/reglages/${mod.key}?${k}=${encodeURIComponent(m)}`);
+      try {
+        const { out, secrets } = readForm(mod, req.body || {});
+        for (const f of mod.settings.fields) if (f.required && !f.secret && out[f.name] === "") return back("err", `\xAB ${f.label} \xBB est obligatoire`);
+        if (Object.keys(secrets).length) {
+          const api = flowApi();
+          if (!api) return back("err", "Coffre introuvable : mets \xE0 jour dysizz-flow");
+          for (const [n, val] of Object.entries(secrets)) await api.writeSecret(n, val, `Me \xB7 ${mod.label}`);
+        }
+        for (const f of mod.settings.fields) if (f.required && f.secret && !await hasSecret(f.secret)) return back("err", `\xAB ${f.label} \xBB est obligatoire`);
+        const cfg = await getCfg();
+        await saveCfg({ settings: { ...cfg.settings || {}, [mod.key]: out } });
+        const done = await applyToWorkflows(mod, out);
+        back("ok", `R\xE9glages enregistr\xE9s${done.length ? " et appliqu\xE9s aux workflows" : ""}. ${mod.settings.after || ""}`);
+      } catch (e) {
+        back("err", e.message);
+      }
+    };
+    var test = async (req, res, mod) => {
+      const T = mod.settings.test;
+      const reply = (ok, message) => res.json({ ok, message });
+      if (!T) return reply(false, "Pas de test pour ce module");
+      const action = require("@saltcorn/data/db/state").getState().actions[T.action];
+      if (!action) return reply(false, `Bloc ${T.action} introuvable : dysizz-flow est-il install\xE9 ?`);
+      const { getCfg } = require_installer();
+      const { out, secrets } = readForm(mod, req.body || {});
+      const v = { ...await values(mod, await getCfg()), ...out };
+      if (Object.keys(secrets).length) {
+        const api = flowApi();
+        if (!api) return reply(false, "Coffre introuvable : mets \xE0 jour dysizz-flow");
+        for (const [n, val] of Object.entries(secrets)) await api.writeSecret(n, val, `Me \xB7 ${mod.label}`);
+      }
+      try {
+        const r = await Promise.race([action.run({ configuration: { ...T.config(v), sortie: "r", delai_max: 40 }, row: {}, user: req.user, req, mode: "workflow" }), new Promise((_, rej) => setTimeout(() => rej(new Error("pas de r\xE9ponse apr\xE8s 45 s")), 45e3))]);
+        reply(true, T.ok ? T.ok(r && r.r, v) : "\xC7a marche.");
+      } catch (e) {
+        reply(false, (T.explain ? T.explain(e.message) : "") || `\xC9chec : ${e.message}`);
+      }
+    };
+    module2.exports = { page, save, test, configured, values, applyToWorkflows };
   }
 });
 
@@ -504,6 +672,14 @@ var require_installer = __commonJS({
       await saveCfg({ installed: [...installed], stamps });
       await refreshAllShells(allMods);
       if (mod.key === "accueil" || installed.has("accueil")) await setHome();
+      const saved = ((await getCfg()).settings || {})[mod.key];
+      if (mod.settings && saved) {
+        try {
+          await require_settings().applyToWorkflows(mod, saved);
+        } catch (e) {
+          log.push(`r\xE9glages non r\xE9appliqu\xE9s : ${e.message}`);
+        }
+      }
       return log;
     };
     var uninstallModule = async (mod, allMods, { dropTables = false } = {}) => {
@@ -1492,11 +1668,29 @@ return { notify: "T\xE2che cr\xE9\xE9e", reload_page: true };`;
       group: "Travail",
       description: "Ta bo\xEEte pro (OVH ou tout serveur IMAP) relev\xE9e toutes les 5 minutes, en lecture seule : non lus, importants, \xE0 traiter, r\xE8gles automatiques, mail \u2192 t\xE2che en un clic.",
       depends: ["taches"],
-      setup: `<ol>
-<li>Dans Dokploy (ton service Saltcorn \u2192 Environment), ajoute <code>DZ_MAIL_PASSWORD=le mot de passe de ta bo\xEEte</code>, puis red\xE9ploie.</li>
-<li>Saltcorn \u2192 D\xE9clencheurs \u2192 <b>mails_releve</b> \u2192 \xE9tape <b>reglages</b> : mets ton adresse dans \xAB utilisateur \xBB. Serveur : <code>ssl0.ovh.net</code> (MX Plan) ou <code>pro1.mail.ovh.net</code> (E-mail Pro).</li>
-<li>\xAB Test run \xBB du workflow pour une premi\xE8re rel\xE8ve. Ensuite c'est automatique (toutes les ~5 min). Tant que l'adresse est vide, le workflow s'arr\xEAte tout de suite sans erreur.</li>
-</ol><p>Rien n'est modifi\xE9 sur le serveur mail : ni lu, ni d\xE9plac\xE9, ni supprim\xE9.</p>`,
+      setup: `<p>Tout se r\xE8gle dans <a href="/dysizz-me/reglages/mails">R\xE9gler Mails pro</a> : ton adresse, ton offre OVH, ton mot de passe (rang\xE9 chiffr\xE9), puis \xAB Tester \xBB. Rien n'est modifi\xE9 sur le serveur mail : ni lu, ni d\xE9plac\xE9, ni supprim\xE9.</p>`,
+      settings: {
+        intro: "Relie ta bo\xEEte mail. Elle est relev\xE9e toutes les 5 minutes, <b>en lecture seule</b> : rien n'est marqu\xE9 lu, d\xE9plac\xE9 ou supprim\xE9 chez OVH.",
+        fields: [
+          { name: "adresse", label: "Ton adresse e-mail", type: "email", required: true, placeholder: "prenom.nom@mondomaine.com" },
+          { name: "offre", label: "O\xF9 est ta bo\xEEte ?", type: "select", default: "ssl0.ovh.net", options: [["ssl0.ovh.net", "OVH \xB7 MX Plan (mail inclus avec le nom de domaine)"], ["pro1.mail.ovh.net", "OVH \xB7 E-mail Pro"], ["imap.gmail.com", "Gmail (mot de passe d'application)"], ["outlook.office365.com", "Outlook / Microsoft 365"], ["autre", "Autre serveur (je le pr\xE9cise)"]], help: "Pas s\xFBr ? Dans ton espace client OVH, rubrique E-mails : \xAB MX Plan \xBB ou \xAB E-mail Pro \xBB." },
+          { name: "serveur_autre", label: "Serveur IMAP (si \xAB Autre \xBB)", type: "text", placeholder: "imap.mondomaine.com" },
+          { name: "mot_de_passe", label: "Mot de passe de la bo\xEEte", type: "password", secret: "ME_MAIL_MDP", required: true, help: "Rang\xE9 chiffr\xE9 dans le coffre, jamais r\xE9affich\xE9." },
+          { name: "port", label: "Port", type: "number", default: 993, help: "993 dans presque tous les cas." },
+          { name: "dossier", label: "Dossier relev\xE9", type: "text", default: "INBOX", help: "INBOX = bo\xEEte de r\xE9ception." }
+        ],
+        apply: [
+          { trigger: "mails_releve", step: "reglages", json: "valeurs", map: { utilisateur: "adresse", serveur: (v) => v.offre === "autre" ? v.serveur_autre : v.offre, dossier: "dossier", variable_mot_de_passe: () => "ME_MAIL_MDP" } },
+          { trigger: "mails_releve", step: "relever", set: { port: (v) => Number(v.port) || 993 } }
+        ],
+        test: {
+          action: "dzf_imap_lire",
+          config: (v) => ({ serveur: v.offre === "autre" ? v.serveur_autre : v.offre, port: Number(v.port) || 993, utilisateur: v.adresse, variable_mot_de_passe: "ME_MAIL_MDP", dossier: v.dossier || "INBOX", jours: 3, max: 3 }),
+          ok: (r) => `Connexion r\xE9ussie. ${(r || []).length} message(s) sur les 3 derniers jours${r && r[0] ? `, par exemple \xAB ${r[0].sujet} \xBB` : ""}.`,
+          explain: (m) => /auth|credential|login|password|LOGIN/i.test(m) ? "Le serveur refuse l'adresse ou le mot de passe. V\xE9rifie-les (et l'offre choisie)." : /ENOTFOUND|getaddrinfo/i.test(m) ? "Serveur introuvable : v\xE9rifie l'offre ou le nom du serveur." : /timeout|ETIMEDOUT|délai/i.test(m) ? "Le serveur ne r\xE9pond pas (port bloqu\xE9 ? mauvais serveur ?)." : ""
+        },
+        after: "La premi\xE8re rel\xE8ve se fait dans les 5 minutes."
+      },
       tables: [
         {
           name: "mails",
@@ -1538,10 +1732,15 @@ return { notify: "T\xE2che cr\xE9\xE9e", reload_page: true };`;
           "dzv-mail",
           K.box(
             "dzv-mail-head",
-            K.field("sujet", "as_text", { cls: "dzv-mail-title" }),
-            K.meta(K.field("de_nom", "as_text"), K.field("de", "as_text"), K.dateFr("date", { time: true }), K.field("statut", "as_text")),
+            K.box("dzv-mail-title", K.field("sujet", "as_text")),
             K.box(
-              "dzv-tile-actions",
+              "dzv-mail-top",
+              K.formula(`'<span class="dzv-mail-av">' + String(de_nom || de || '?').trim().charAt(0).replace(/[<>&]/g, '?') + '</span>'`, { html: true, block: false }),
+              K.box("dzv-mail-who", K.box("dzv-mail-n", K.field("de_nom", "as_text")), K.box("dzv-mail-a", K.field("de", "as_text"))),
+              K.box("dzv-mail-when", K.dateFr("date", { time: true, year: true }))
+            ),
+            K.box(
+              "dzv-mail-actions",
               statut("\xC0 traiter", "\xE0 traiter", "fas fa-flag", "btn-outline-warning"),
               statut("En attente", "en attente", "far fa-clock"),
               statut("Trait\xE9", "trait\xE9", "fas fa-check", "btn-outline-success"),
@@ -1550,8 +1749,8 @@ return { notify: "T\xE2che cr\xE9\xE9e", reload_page: true };`;
             )
           ),
           K.formula(`pieces_jointes ? '<span class="dzv-meta"><i class="fas fa-paperclip"></i>' + pieces_jointes + ' pi\xE8ce(s) jointe(s) : \xE0 ouvrir dans ton webmail</span>' : ''`, { html: true }),
-          K.field("corps", "as_text", { cls: "dzv-mail-body", block: true })
-        ), { title: "Mail", width: 860 }),
+          K.field("corps", "dz_mail", { block: true })
+        ), { title: "Mail", width: 900 }),
         K.list("mails_boite", "mails", [
           ["", K.formula(`(important ? '<i class="fas fa-star" style="color:var(--dzv-warning)"></i>' : '') + (pieces_jointes ? ' <i class="fas fa-paperclip dzv-muted"></i>' : '')`, { html: true, block: false })],
           ["De", K.box("dzv-mail-from", K.field("de_nom", "as_text"))],
@@ -1588,7 +1787,7 @@ return { notify: "T\xE2che cr\xE9\xE9e", reload_page: true };`;
           K.st("verrou", "dzf_verrou", { action: "prendre", nom: "releve-mails", duree: 600, sortie: "verrou" }, { next_step: 'verrou ? "dernier" : ""' }),
           K.st("dernier", "dzf_table_compter", { table: "mails", stat: "max", champ: "uid", filtre: K.J({ dossier: "{{dossier}}" }), sortie: "dernier_uid" }),
           K.st("relever", "dzf_imap_lire", { serveur: "{{serveur}}", port: 993, utilisateur: "{{utilisateur}}", variable_mot_de_passe: "{{variable_mot_de_passe}}", dossier: "{{dossier}}", depuis_uid: "{{dernier_uid}}", jours: 14, max: 100, si_erreur: "continuer", delai_max: 180, sortie: "nouveaux" }),
-          K.st("preparer", "dzf_liste_transformer", { liste: "{{nouveaux}}", modele: '{"uid":"{{item.uid}}","dossier":"{{item.dossier}}","message_id":"{{item.message_id}}","de":"{{item.de}}","de_nom":"{{item.de_nom}}","a":"{{item.a}}","sujet":"{{item.sujet}}","date":"{{item.date}}","extrait":"{{item.extrait}}","corps":"{{item.corps}}","lu":"{{item.lu}}","suivi":"{{item.suivi}}","pieces_jointes":"{{item.pieces_jointes}}","important":false,"statut":"nouveau"}', sortie: "lignes" }),
+          K.st("preparer", "dzf_liste_transformer", { liste: "{{nouveaux}}", modele: '{"uid":"{{item.uid}}","dossier":"{{item.dossier}}","message_id":"{{item.message_id}}","de":"{{item.de}}","de_nom":"{{item.de_nom}}","a":"{{item.a}}","sujet":"{{item.sujet}}","date":"{{item.date}}","extrait":"{{item.extrait}}","corps":"{{item.contenu}}","lu":"{{item.lu}}","suivi":"{{item.suivi}}","pieces_jointes":"{{item.pieces_jointes}}","important":false,"statut":"nouveau"}', sortie: "lignes" }),
           K.st("ranger", "dzf_table_upsert", { table: "mails", liste: "{{lignes}}", cle: "message_id", sortie: "bilan" }),
           K.st("liberer", "dzf_verrou", { action: "lib\xE9rer", nom: "releve-mails", sortie: "verrou_libre" })
         ], { reglages: ["valeurs"] }),
@@ -1655,11 +1854,22 @@ return nouvelles;`;
       group: "Travail",
       description: "Offres d'emploi en France (API France Travail, gratuite) selon tes recherches enregistr\xE9es, tri rapide (int\xE9ressante / \xE9carter / postuler) et suivi des candidatures avec relance automatique.",
       depends: [],
-      setup: `<ol>
-<li>Cr\xE9e un compte sur <a href="https://francetravail.io" target="_blank" rel="noopener">francetravail.io</a>, puis une application avec l'API \xAB Offres d'emploi v2 \xBB (gratuit).</li>
-<li>Dans Dokploy (service Saltcorn \u2192 Environment) : <code>FT_CLIENT_ID=\u2026</code> et <code>FT_CLIENT_SECRET=\u2026</code>, puis red\xE9ploie.</li>
-<li>R\xE8gle tes recherches (mots-cl\xE9s, d\xE9partement, alternance\u2026) dans la page Emploi, puis D\xE9clencheurs \u2192 <b>emplois_releve</b> \u2192 \xAB Test run \xBB (tant que les variables manquent, il s'arr\xEAte sans erreur).</li>
-</ol>`,
+      setup: `<p>Cr\xE9e une application gratuite sur <a href="https://francetravail.io" target="_blank" rel="noopener">francetravail.io</a> (API \xAB Offres d'emploi v2 \xBB), puis colle ses deux cl\xE9s dans <a href="/dysizz-me/reglages/emploi">R\xE9gler Emploi</a>. Tes recherches se r\xE8glent ensuite dans la page Emploi.</p>`,
+      settings: {
+        intro: `Les offres viennent de l'API officielle de France Travail (gratuite). 1) Cr\xE9e un compte sur <a href="https://francetravail.io" target="_blank" rel="noopener">francetravail.io</a>. 2) \xAB Cr\xE9er une application \xBB, coche l'API <b>Offres d'emploi v2</b>. 3) Copie ici l'identifiant et la cl\xE9 secr\xE8te.`,
+        fields: [
+          { name: "client_id", label: "Identifiant client", type: "password", secret: "FT_CLIENT_ID", required: true },
+          { name: "client_secret", label: "Cl\xE9 secr\xE8te", type: "password", secret: "FT_CLIENT_SECRET", required: true }
+        ],
+        apply: [{ trigger: "emplois_releve", step: "configure", set: { condition: "true" } }],
+        test: {
+          action: "dzf_france_travail",
+          config: () => ({ mots_cles: "data", depuis_jours: 7 }),
+          ok: (r) => `Connexion r\xE9ussie. ${Array.isArray(r) ? r.length : 0} offre(s) \xAB data \xBB cette semaine.`,
+          explain: (m) => /401|invalid_client|unauthorized/i.test(m) ? "France Travail refuse les cl\xE9s : recopie-les (et v\xE9rifie que l'API Offres d'emploi v2 est coch\xE9e)." : ""
+        },
+        after: "R\xE8gle maintenant tes recherches dans la page Emploi."
+      },
       tables: [
         {
           name: "emploi_recherches",
@@ -2299,11 +2509,92 @@ var require_admin = __commonJS({
     var { GROUPS } = require_shell();
     var csrf = (req) => req.csrfToken ? req.csrfToken() : "";
     var form = (req, action, inner, o = {}) => `<form method="post" action="${action}" class="dzv-inline"${o.confirm ? ` onsubmit="return confirm('${esc(o.confirm)}')"` : ""}><input type="hidden" name="_csrf" value="${esc(csrf(req))}">${inner}</form>`;
-    var ADMIN_CSS = "/* ---------- page d'administration des modules ---------- */\n.dzv-admin { max-width: 1180px; margin: 0 auto; }\n.dzv-admin h1 { font-weight: 750; letter-spacing: -.02em; display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }\n.dzv-admin h2 { font-size: 1.05rem; font-weight: 700; margin: 2rem 0 .8rem; }\n.dzv-admin-top { display: flex; gap: 1rem; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; }\n.dzv-admin-top p { color: var(--dzv-mute); max-width: 70ch; }\n.dzv-admin-group { font: 600 .74rem var(--dzv-mono) !important; text-transform: uppercase; letter-spacing: .12em; color: var(--dzv-mute); }\n.dzv-admin-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); }\n.dzv-mod { display: flex; flex-direction: column; gap: .6rem; padding: 1.1rem; border-radius: var(--dzv-radius); border: 1px solid var(--dzv-border); background: var(--dzv-surface); }\n.dzv-mod-on { border-color: color-mix(in srgb, var(--dzv-success) 45%, var(--dzv-border)); }\n.dzv-mod-head { display: flex; gap: .75rem; align-items: center; }\n.dzv-mod-head b { display: block; font-size: 1.02rem; }\n.dzv-mod-ic { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: var(--dzv-primary-soft); color: var(--dzv-ink); font-size: 1.05rem; flex: none; }\n.dzv-mod p { margin: 0; color: var(--dzv-soft); font-size: .88rem; line-height: 1.5; }\n.dzv-mod-counts { display: flex; flex-wrap: wrap; gap: .35rem; }\n.dzv-mod-counts span { font: 600 .68rem var(--dzv-mono); padding: .15rem .5rem; border-radius: 99px; background: var(--dzv-surface-2); color: var(--dzv-mute); }\n.dzv-mod-deps { font-size: .8rem; color: var(--dzv-mute); }\n.dzv-mod-actions { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; margin-top: auto; }\n.dzv-inline { display: inline; margin: 0; }\n.dzv-st { display: inline-block; font: 600 .66rem var(--dzv-mono); text-transform: uppercase; letter-spacing: .06em; padding: .15rem .45rem; border-radius: 6px; background: var(--dzv-surface-2); color: var(--dzv-mute); margin-left: .35rem; vertical-align: middle; }\n.dzv-st-on { background: color-mix(in srgb, var(--dzv-success) 15%, transparent); color: var(--dzv-success); }\n.dzv-st-part { background: color-mix(in srgb, var(--dzv-warning) 18%, transparent); color: color-mix(in srgb, var(--dzv-warning) 70%, var(--dzv-text)); }\n.dzv-flash { padding: .8rem 1rem; border-radius: 10px; margin: 1rem 0; font-size: .9rem; }\n.dzv-ok { background: color-mix(in srgb, var(--dzv-success) 12%, transparent); }\n.dzv-ko { background: color-mix(in srgb, var(--dzv-danger) 12%, transparent); }\n.dzv-flows { display: grid; gap: .5rem; }\n.dzv-flow { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 2fr); gap: .8rem; align-items: center; padding: .75rem .9rem; border-radius: 12px; background: var(--dzv-surface-2); font-size: .9rem; }\n.dzv-flow-q { font-weight: 650; }\n.dzv-flow > i { color: var(--dzv-ink); }\n@media (max-width: 640px) { .dzv-flow { grid-template-columns: 1fr; } .dzv-flow > i { transform: rotate(90deg); } }\n.dzv-det { border: 1px solid var(--dzv-border); border-radius: 12px; padding: .7rem .9rem; margin-bottom: .5rem; background: var(--dzv-surface); }\n.dzv-det summary { cursor: pointer; }\n.dzv-det summary small { color: var(--dzv-mute); }\n.dzv-edit { font-size: .8rem; margin-left: .5rem; }\n.dzv-fields { width: 100%; margin-top: .7rem; font-size: .85rem; }\n.dzv-fields th { font: 600 .68rem var(--dzv-mono); text-transform: uppercase; color: var(--dzv-mute); padding: .3rem .4rem; }\n.dzv-fields td { border-top: 1px solid var(--dzv-border); padding: .35rem .4rem; vertical-align: top; }\n.dzv-code { margin: .7rem 0 0; padding: .9rem 1rem; border-radius: 10px; background: #0f1117; color: #e6e6ea; font: .8rem/1.55 var(--dzv-mono); white-space: pre-wrap; max-height: 420px; overflow: auto; }\n.dzv-ul { list-style: none; padding: 0; display: grid; gap: .4rem; font-size: .9rem; }\n.dzv-ul i { color: var(--dzv-mute); width: 1.2em; }\n.dzv-ul small { color: var(--dzv-mute); }\n.dzv-danger { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; padding: 1rem; border-radius: 12px; border: 1px dashed var(--dzv-border); }\n.dzv-setup { padding: 1rem 1.1rem; border-radius: 12px; background: var(--dzv-primary-soft); }\n.dzv-setup h2 { margin-top: 0 !important; }\n.dzv-setup code { font-size: .85em; }\n\n";
+    var ADMIN_CSS = `/* ---------- page d'administration des modules ---------- */
+.dzv-admin { max-width: 1180px; margin: 0 auto; }
+.dzv-admin h1 { font-weight: 750; letter-spacing: -.02em; display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+.dzv-admin h2 { font-size: 1.05rem; font-weight: 700; margin: 2rem 0 .8rem; }
+.dzv-admin-top { display: flex; gap: 1rem; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; }
+.dzv-admin-top p { color: var(--dzv-mute); max-width: 70ch; }
+.dzv-admin-group { font: 600 .74rem var(--dzv-mono) !important; text-transform: uppercase; letter-spacing: .12em; color: var(--dzv-mute); }
+.dzv-admin-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); }
+.dzv-mod { display: flex; flex-direction: column; gap: .6rem; padding: 1.1rem; border-radius: var(--dzv-radius); border: 1px solid var(--dzv-border); background: var(--dzv-surface); }
+.dzv-mod-on { border-color: color-mix(in srgb, var(--dzv-success) 45%, var(--dzv-border)); }
+.dzv-mod-head { display: flex; gap: .75rem; align-items: center; }
+.dzv-mod-head b { display: block; font-size: 1.02rem; }
+.dzv-mod-ic { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: var(--dzv-primary-soft); color: var(--dzv-ink); font-size: 1.05rem; flex: none; }
+.dzv-mod p { margin: 0; color: var(--dzv-soft); font-size: .88rem; line-height: 1.5; }
+.dzv-mod-counts { display: flex; flex-wrap: wrap; gap: .35rem; }
+.dzv-mod-counts span { font: 600 .68rem var(--dzv-mono); padding: .15rem .5rem; border-radius: 99px; background: var(--dzv-surface-2); color: var(--dzv-mute); }
+.dzv-mod-deps { font-size: .8rem; color: var(--dzv-mute); }
+.dzv-mod-actions { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; margin-top: auto; }
+.dzv-inline { display: inline; margin: 0; }
+.dzv-st { display: inline-block; font: 600 .66rem var(--dzv-mono); text-transform: uppercase; letter-spacing: .06em; padding: .15rem .45rem; border-radius: 6px; background: var(--dzv-surface-2); color: var(--dzv-mute); margin-left: .35rem; vertical-align: middle; }
+.dzv-st-on { background: color-mix(in srgb, var(--dzv-success) 15%, transparent); color: var(--dzv-success); }
+.dzv-st-part { background: color-mix(in srgb, var(--dzv-warning) 18%, transparent); color: color-mix(in srgb, var(--dzv-warning) 70%, var(--dzv-text)); }
+.dzv-flash { padding: .8rem 1rem; border-radius: 10px; margin: 1rem 0; font-size: .9rem; }
+.dzv-ok { background: color-mix(in srgb, var(--dzv-success) 12%, transparent); }
+.dzv-ko { background: color-mix(in srgb, var(--dzv-danger) 12%, transparent); }
+.dzv-flows { display: grid; gap: .5rem; }
+.dzv-flow { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 2fr); gap: .8rem; align-items: center; padding: .75rem .9rem; border-radius: 12px; background: var(--dzv-surface-2); font-size: .9rem; }
+.dzv-flow-q { font-weight: 650; }
+.dzv-flow > i { color: var(--dzv-ink); }
+@media (max-width: 640px) { .dzv-flow { grid-template-columns: 1fr; } .dzv-flow > i { transform: rotate(90deg); } }
+.dzv-det { border: 1px solid var(--dzv-border); border-radius: 12px; padding: .7rem .9rem; margin-bottom: .5rem; background: var(--dzv-surface); }
+.dzv-det summary { cursor: pointer; }
+.dzv-det summary small { color: var(--dzv-mute); }
+.dzv-edit { font-size: .8rem; margin-left: .5rem; }
+.dzv-fields { width: 100%; margin-top: .7rem; font-size: .85rem; }
+.dzv-fields th { font: 600 .68rem var(--dzv-mono); text-transform: uppercase; color: var(--dzv-mute); padding: .3rem .4rem; }
+.dzv-fields td { border-top: 1px solid var(--dzv-border); padding: .35rem .4rem; vertical-align: top; }
+.dzv-code { margin: .7rem 0 0; padding: .9rem 1rem; border-radius: 10px; background: #0f1117; color: #e6e6ea; font: .8rem/1.55 var(--dzv-mono); white-space: pre-wrap; max-height: 420px; overflow: auto; }
+.dzv-ul { list-style: none; padding: 0; display: grid; gap: .4rem; font-size: .9rem; }
+.dzv-ul i { color: var(--dzv-mute); width: 1.2em; }
+.dzv-ul small { color: var(--dzv-mute); }
+.dzv-danger { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; padding: 1rem; border-radius: 12px; border: 1px dashed var(--dzv-border); }
+.dzv-setup { padding: 1rem 1.1rem; border-radius: 12px; background: var(--dzv-primary-soft); }
+.dzv-setup h2 { margin-top: 0 !important; }
+.dzv-setup code { font-size: .85em; }
+.dzv-start { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: .8rem; margin: 1rem 0 .5rem; }
+.dzv-start-s { border: 1px solid var(--dzv-border); border-radius: 14px; padding: 1rem; background: var(--dzv-surface); display: flex; flex-direction: column; gap: .5rem; align-items: flex-start; }
+.dzv-start-s p { margin: 0; color: var(--dzv-soft); font-size: .88rem; }
+.dzv-start-s.done { border-color: color-mix(in srgb, var(--dzv-success) 45%, var(--dzv-border)); }
+.dzv-start-s.done b::after { content: " \u2713"; color: var(--dzv-success); }
+
+`;
     var wrap = (res, title, html) => res.sendWrap({ title, requestFluidLayout: false }, { above: [{ type: "blank", isHTML: true, contents: `<style>${ADMIN_CSS}</style><div class="dzv-admin">${html}</div>`.replace(/\{\{/g, "&#123;&#123;").replace(/\}\}/g, "&#125;&#125;") }] });
     var flash = (req) => {
       const q = req.query || {};
       return (q.ok ? `<div class="dzv-flash dzv-ok">${esc(q.ok).replace(/\n/g, "<br>")}</div>` : "") + (q.err ? `<div class="dzv-flash dzv-ko">${esc(q.err)}</div>` : "");
+    };
+    var settings = require_settings();
+    var modOf = (req) => MODULES.find((x) => x.key === req.params.key && x.settings);
+    var settingsPage = async (req, res) => {
+      if (!isAdmin(req)) return denied(res);
+      const m = modOf(req);
+      if (!m) return res.redirect("/dysizz-me");
+      return settings.page(req, res, m);
+    };
+    var settingsSave = async (req, res) => {
+      if (!isAdmin(req)) return denied(res);
+      const m = modOf(req);
+      if (!m) return res.redirect("/dysizz-me");
+      return settings.save(req, res, m);
+    };
+    var settingsTest = async (req, res) => {
+      if (!isAdmin(req)) return res.status(403).json({ ok: false, message: "r\xE9serv\xE9 aux admins" });
+      const m = modOf(req);
+      if (!m) return res.json({ ok: false, message: "module inconnu" });
+      return settings.test(req, res, m);
+    };
+    var etat = async (req, res) => {
+      res.setHeader("Cache-Control", "no-store");
+      if (!isAdmin(req)) return res.json({});
+      const page = String((req.query || {}).page || "");
+      const m = MODULES.find((x) => x.settings && (x.pages || []).some((p) => p.name === page));
+      if (!m) return res.json({});
+      const cfg = await getCfg();
+      if (!(cfg.installed || []).includes(m.key) || await settings.configured(m, cfg)) return res.json({});
+      res.json({ hint: `${m.label} n'est pas encore r\xE9gl\xE9 : il ne peut rien r\xE9cup\xE9rer pour l'instant.`, url: `/dysizz-me/reglages/${m.key}` });
     };
     var badge = (st) => st.installed ? '<span class="dzv-st dzv-st-on">install\xE9</span>' : st.partial ? '<span class="dzv-st dzv-st-part">incomplet</span>' : '<span class="dzv-st">non install\xE9</span>';
     var home = async (req, res) => {
@@ -2316,13 +2607,15 @@ var require_admin = __commonJS({
         cards.push(`<h2 class="dzv-admin-group">${esc(g)}</h2><div class="dzv-admin-grid">`);
         for (const m of mods) {
           const st = await moduleStatus(m, cfg);
+          const needConf = st.installed && m.settings && !await settings.configured(m, cfg);
           const deps = (m.depends || []).map((d) => (MODULES.find((x) => x.key === d) || {}).label || d);
           cards.push(`<div class="dzv-mod${st.installed ? " dzv-mod-on" : ""}">
-<div class="dzv-mod-head"><span class="dzv-mod-ic"><i class="${esc(m.icon)}"></i></span><div><b>${esc(m.label)}</b>${badge(st)}</div></div>
+<div class="dzv-mod-head"><span class="dzv-mod-ic"><i class="${esc(m.icon)}"></i></span><div><b>${esc(m.label)}</b>${badge(st)}${needConf ? '<span class="dzv-st dzv-st-part">\xE0 r\xE9gler</span>' : ""}</div></div>
 <p>${esc(m.description)}</p>
 <div class="dzv-mod-counts"><span>${(m.tables || []).length} tables</span><span>${(m.views || []).length} vues</span><span>${(m.pages || []).length} pages</span><span>${(m.triggers || []).length} workflows</span></div>
 ${deps.length ? `<div class="dzv-mod-deps">Utilise : ${esc(deps.join(", "))}</div>` : ""}
 <div class="dzv-mod-actions">
+${st.installed && m.settings ? `<a class="btn btn-sm ${needConf ? "btn-primary" : "btn-outline-secondary"}" href="/dysizz-me/reglages/${m.key}"><i class="fas fa-sliders-h"></i> R\xE9gler</a>` : ""}
 ${form(req, `/dysizz-me/install/${m.key}`, `<button class="btn btn-sm ${st.installed ? "btn-outline-secondary" : "btn-primary"}">${st.installed ? "Mettre \xE0 jour" : "Installer"}</button>`)}
 <a class="btn btn-sm btn-link" href="/dysizz-me/m/${m.key}">Ce qu'il y a derri\xE8re</a>
 ${st.installed && (m.pages || [])[0] ? `<a class="btn btn-sm btn-link" href="/page/${esc(m.pages[0].name)}">Ouvrir</a>` : ""}
@@ -2331,9 +2624,18 @@ ${st.installed && (m.pages || [])[0] ? `<a class="btn btn-sm btn-link" href="/pa
         cards.push("</div>");
       }
       const miss = require_installer().missingDeps();
+      const inst = new Set(cfg.installed || []);
+      const toConf = [];
+      for (const m of MODULES) if (inst.has(m.key) && m.settings && !await settings.configured(m, cfg)) toConf.push(m);
+      const s1 = inst.size > 0, s2 = s1 && !toConf.length;
+      const steps = `<div class="dzv-start">
+<div class="dzv-start-s${s1 ? " done" : ""}"><b>1. Installer</b><p>${s1 ? `${inst.size} module(s) install\xE9(s). Tu peux en ajouter plus bas.` : "Installe tout d'un coup, ou seulement les modules qui t'int\xE9ressent plus bas."}</p>${s1 ? "" : form(req, "/dysizz-me/install-all", '<button class="btn btn-primary btn-sm"><i class="fas fa-magic"></i> Tout installer</button>')}</div>
+<div class="dzv-start-s${s2 ? " done" : ""}"><b>2. R\xE9gler</b><p>${!s1 ? "Apr\xE8s l'installation." : toConf.length ? "Ces modules ont besoin de toi (adresse mail, cl\xE9s\u2026) :" : "Tout est r\xE9gl\xE9."}</p>${toConf.map((m) => `<a class="btn btn-sm btn-outline-primary" href="/dysizz-me/reglages/${m.key}"><i class="${esc(m.icon)}"></i> ${esc(m.label)}</a>`).join(" ")}</div>
+<div class="dzv-start-s"><b>3. Utiliser</b><p>Ouvre Me : ta journ\xE9e, tes mails, tes t\xE2ches\u2026</p>${inst.has("accueil") ? '<a class="btn btn-sm btn-primary" href="/page/accueil"><i class="fas fa-sun"></i> Ouvrir Me</a>' : ""}</div></div>`;
       wrap(res, "Modules", `${flash(req)}
 <div class="dzv-admin-top"><div><h1>Me</h1><p>La solution est d\xE9coup\xE9e en modules. Chacun ajoute des tables, des vues (blocs de dysizz-ui), des pages et des workflows (blocs de dysizz-flow). Tout reste modifiable dans Saltcorn ; \xAB Ce qu'il y a derri\xE8re \xBB montre comment chaque module fonctionne. Version ${esc(VERSION)}.</p></div>
 ${form(req, "/dysizz-me/install-all", '<button class="btn btn-primary"><i class="fas fa-magic"></i> Tout installer</button>')}</div>
+${steps}
 ${miss.length ? `<div class="dzv-flash dzv-ko">Cette solution a besoin de : <b>${esc(miss.join(", "))}</b>. Installe-les d'abord (Param\xE8tres \u2192 Modules).</div>` : ""}
 ${cards.join("")}`);
     };
@@ -2432,21 +2734,91 @@ ${form(req, `/dysizz-me/uninstall/${m.key}?drop=1`, `<input name="confirm" place
         go(res, `/dysizz-me/m/${m.key}`, m.key, e.message, true);
       }
     };
-    module2.exports = { home, detail, install, installAll, uninstall };
+    module2.exports = { etat, settingsPage, settingsSave, settingsTest, home, detail, install, installAll, uninstall };
+  }
+});
+
+// ../src/hub.js
+var require_hub = __commonJS({
+  "../src/hub.js"(exports2, module2) {
+    "use strict";
+    var MODULES = require_modules();
+    var COLORS = { accueil: "#0063b1", taches: "#00a300", objectifs: "#603cba", maison: "#8a5a2b", budget: "#1e7145", sante: "#b91d47", documents: "#3a4a5c", mails: "#2d89ef", emploi: "#e3a21a", veille: "#00aba9", videos: "#e51400", actus: "#7e3878", surveillance: "#da532c" };
+    var SIZE = { accueil: "w", taches: "m", mails: "m", budget: "m" };
+    var count = async (table, where) => {
+      const T = require("@saltcorn/data/models/table");
+      const t = T.findOne({ name: table });
+      return t ? t.countRows(where) : null;
+    };
+    var day = (n = 0) => {
+      const d = /* @__PURE__ */ new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() + n);
+      return d;
+    };
+    var LIVE = {
+      taches: async () => {
+        const n = await count("taches", { not: { statut: "fait" }, echeance: { lt: day(1) } });
+        return n === null ? null : n ? { n, text: `${n} pour aujourd'hui` } : { text: "rien d'urgent" };
+      },
+      mails: async () => {
+        const n = await count("mails", { lu: false });
+        return n === null ? null : n ? { n, text: `${n} non lu${n > 1 ? "s" : ""}` } : { text: "tout est lu" };
+      },
+      surveillance: async () => {
+        const n = await count("surveillance_sites", { actif: true, etat: "panne" });
+        return n === null ? null : n ? { n, text: `${n} en panne` } : { text: "tout fonctionne" };
+      },
+      documents: async () => {
+        const n = await count("documents", { expire_le: { gt: day(0), lt: day(60) } });
+        return n ? { n, text: `${n} expire${n > 1 ? "nt" : ""} bient\xF4t` } : null;
+      }
+    };
+    var dysizz_hub2 = async (req) => {
+      const { getConfig } = require("@saltcorn/data/models/config");
+      const cfg = await getConfig("dysizz_me", null) || await getConfig("dysizz_vie", null) || {};
+      const installed = new Set(cfg.installed || []);
+      const tiles = [];
+      for (const m of MODULES) {
+        if (!installed.has(m.key)) continue;
+        for (const n of m.nav || []) tiles.push({
+          group: "Mes applis",
+          label: n.label,
+          sub: m.key === "accueil" ? "Me \xB7 ta journ\xE9e en un coup d'\u0153il" : (m.description || "").split(/[.:]/)[0],
+          url: `/page/${n.page}`,
+          icon: n.icon,
+          color: COLORS[m.key] || "#0063b1",
+          size: SIZE[m.key] || "s",
+          min_role: 80,
+          live: LIVE[m.key]
+        });
+      }
+      const admin2 = req.user && req.user.role_id === 1;
+      if (admin2) tiles.push({ group: "Mes applis", label: "R\xE9glages de Me", sub: "modules, configuration", url: "/dysizz-me", icon: "fas fa-puzzle-piece", color: "#3a4a5c", size: tiles.length ? "s" : "w" });
+      return tiles;
+    };
+    module2.exports = { dysizz_hub: dysizz_hub2 };
   }
 });
 
 // ../src/index.js
 var { PLUGIN } = require_core();
 var admin = require_admin();
+var { dysizz_hub } = require_hub();
 module.exports = {
   sc_plugin_api_version: 1,
   plugin_name: PLUGIN,
+  /* tuiles sur l'accueil Dysizz (/dysizz) */
+  dysizz_hub,
   routes: [
     { url: "/dysizz-me", method: "get", callback: admin.home },
     { url: "/dysizz-me/m/:key", method: "get", callback: admin.detail },
     { url: "/dysizz-me/install/:key", method: "post", callback: admin.install },
     { url: "/dysizz-me/install-all", method: "post", callback: admin.installAll },
-    { url: "/dysizz-me/uninstall/:key", method: "post", callback: admin.uninstall }
+    { url: "/dysizz-me/uninstall/:key", method: "post", callback: admin.uninstall },
+    { url: "/dysizz-me/etat", method: "get", callback: admin.etat },
+    { url: "/dysizz-me/reglages/:key", method: "get", callback: admin.settingsPage },
+    { url: "/dysizz-me/reglages/:key", method: "post", callback: admin.settingsSave },
+    { url: "/dysizz-me/reglages/:key/tester", method: "post", callback: admin.settingsTest }
   ]
 };

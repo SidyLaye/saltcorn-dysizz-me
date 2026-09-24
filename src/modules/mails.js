@@ -47,11 +47,29 @@ module.exports = {
   group: "Travail",
   description: "Ta boîte pro (OVH ou tout serveur IMAP) relevée toutes les 5 minutes, en lecture seule : non lus, importants, à traiter, règles automatiques, mail → tâche en un clic.",
   depends: ["taches"],
-  setup: `<ol>
-<li>Dans Dokploy (ton service Saltcorn → Environment), ajoute <code>DZ_MAIL_PASSWORD=le mot de passe de ta boîte</code>, puis redéploie.</li>
-<li>Saltcorn → Déclencheurs → <b>mails_releve</b> → étape <b>reglages</b> : mets ton adresse dans « utilisateur ». Serveur : <code>ssl0.ovh.net</code> (MX Plan) ou <code>pro1.mail.ovh.net</code> (E-mail Pro).</li>
-<li>« Test run » du workflow pour une première relève. Ensuite c'est automatique (toutes les ~5 min). Tant que l'adresse est vide, le workflow s'arrête tout de suite sans erreur.</li>
-</ol><p>Rien n'est modifié sur le serveur mail : ni lu, ni déplacé, ni supprimé.</p>`,
+  setup: "<p>Tout se règle dans <a href=\"/dysizz-me/reglages/mails\">Régler Mails pro</a> : ton adresse, ton offre OVH, ton mot de passe (rangé chiffré), puis « Tester ». Rien n'est modifié sur le serveur mail : ni lu, ni déplacé, ni supprimé.</p>",
+  settings: {
+    intro: "Relie ta boîte mail. Elle est relevée toutes les 5 minutes, <b>en lecture seule</b> : rien n'est marqué lu, déplacé ou supprimé chez OVH.",
+    fields: [
+      { name: "adresse", label: "Ton adresse e-mail", type: "email", required: true, placeholder: "prenom.nom@mondomaine.com" },
+      { name: "offre", label: "Où est ta boîte ?", type: "select", default: "ssl0.ovh.net", options: [["ssl0.ovh.net", "OVH · MX Plan (mail inclus avec le nom de domaine)"], ["pro1.mail.ovh.net", "OVH · E-mail Pro"], ["imap.gmail.com", "Gmail (mot de passe d'application)"], ["outlook.office365.com", "Outlook / Microsoft 365"], ["autre", "Autre serveur (je le précise)"]], help: "Pas sûr ? Dans ton espace client OVH, rubrique E-mails : « MX Plan » ou « E-mail Pro »." },
+      { name: "serveur_autre", label: "Serveur IMAP (si « Autre »)", type: "text", placeholder: "imap.mondomaine.com" },
+      { name: "mot_de_passe", label: "Mot de passe de la boîte", type: "password", secret: "ME_MAIL_MDP", required: true, help: "Rangé chiffré dans le coffre, jamais réaffiché." },
+      { name: "port", label: "Port", type: "number", default: 993, help: "993 dans presque tous les cas." },
+      { name: "dossier", label: "Dossier relevé", type: "text", default: "INBOX", help: "INBOX = boîte de réception." },
+    ],
+    apply: [
+      { trigger: "mails_releve", step: "reglages", json: "valeurs", map: { utilisateur: "adresse", serveur: (v) => (v.offre === "autre" ? v.serveur_autre : v.offre), dossier: "dossier", variable_mot_de_passe: () => "ME_MAIL_MDP" } },
+      { trigger: "mails_releve", step: "relever", set: { port: (v) => Number(v.port) || 993 } },
+    ],
+    test: {
+      action: "dzf_imap_lire",
+      config: (v) => ({ serveur: v.offre === "autre" ? v.serveur_autre : v.offre, port: Number(v.port) || 993, utilisateur: v.adresse, variable_mot_de_passe: "ME_MAIL_MDP", dossier: v.dossier || "INBOX", jours: 3, max: 3 }),
+      ok: (r) => `Connexion réussie. ${(r || []).length} message(s) sur les 3 derniers jours${r && r[0] ? `, par exemple « ${r[0].sujet} »` : ""}.`,
+      explain: (m) => (/auth|credential|login|password|LOGIN/i.test(m) ? "Le serveur refuse l'adresse ou le mot de passe. Vérifie-les (et l'offre choisie)." : /ENOTFOUND|getaddrinfo/i.test(m) ? "Serveur introuvable : vérifie l'offre ou le nom du serveur." : /timeout|ETIMEDOUT|délai/i.test(m) ? "Le serveur ne répond pas (port bloqué ? mauvais serveur ?)." : ""),
+    },
+    after: "La première relève se fait dans les 5 minutes.",
+  },
   tables: [
     {
       name: "mails", description: "Copie locale de tes mails (lecture seule)",
@@ -78,13 +96,16 @@ module.exports = {
   views: [
     K.show("mail_lecture", "mails", K.box("dzv-mail",
       K.box("dzv-mail-head",
-        K.field("sujet", "as_text", { cls: "dzv-mail-title" }),
-        K.meta(K.field("de_nom", "as_text"), K.field("de", "as_text"), K.dateFr("date", { time: true }), K.field("statut", "as_text")),
-        K.box("dzv-tile-actions",
+        K.box("dzv-mail-title", K.field("sujet", "as_text")),
+        K.box("dzv-mail-top",
+          K.formula("'<span class=\"dzv-mail-av\">' + String(de_nom || de || '?').trim().charAt(0).replace(/[<>&]/g, '?') + '</span>'", { html: true, block: false }),
+          K.box("dzv-mail-who", K.box("dzv-mail-n", K.field("de_nom", "as_text")), K.box("dzv-mail-a", K.field("de", "as_text"))),
+          K.box("dzv-mail-when", K.dateFr("date", { time: true, year: true }))),
+        K.box("dzv-mail-actions",
           statut("À traiter", "à traiter", "fas fa-flag", "btn-outline-warning"), statut("En attente", "en attente", "far fa-clock"), statut("Traité", "traité", "fas fa-check", "btn-outline-success"), statut("Archiver", "archivé", "fas fa-archive"),
           K.jsBtn("En faire une tâche", EN_TACHE, { icon: "fas fa-check-circle", style: "btn-primary" }))),
       K.formula("pieces_jointes ? '<span class=\"dzv-meta\"><i class=\"fas fa-paperclip\"></i>' + pieces_jointes + ' pièce(s) jointe(s) : à ouvrir dans ton webmail</span>' : ''", { html: true }),
-      K.field("corps", "as_text", { cls: "dzv-mail-body", block: true })), { title: "Mail", width: 860 }),
+      K.field("corps", "dz_mail", { block: true })), { title: "Mail", width: 900 }),
     K.list("mails_boite", "mails", [
       ["", K.formula("(important ? '<i class=\"fas fa-star\" style=\"color:var(--dzv-warning)\"></i>' : '') + (pieces_jointes ? ' <i class=\"fas fa-paperclip dzv-muted\"></i>' : '')", { html: true, block: false })],
       ["De", K.box("dzv-mail-from", K.field("de_nom", "as_text"))],
@@ -109,7 +130,7 @@ module.exports = {
       K.st("verrou", "dzf_verrou", { action: "prendre", nom: "releve-mails", duree: 600, sortie: "verrou" }, { next_step: 'verrou ? "dernier" : ""' }),
       K.st("dernier", "dzf_table_compter", { table: "mails", stat: "max", champ: "uid", filtre: K.J({ dossier: "{{dossier}}" }), sortie: "dernier_uid" }),
       K.st("relever", "dzf_imap_lire", { serveur: "{{serveur}}", port: 993, utilisateur: "{{utilisateur}}", variable_mot_de_passe: "{{variable_mot_de_passe}}", dossier: "{{dossier}}", depuis_uid: "{{dernier_uid}}", jours: 14, max: 100, si_erreur: "continuer", delai_max: 180, sortie: "nouveaux" }),
-      K.st("preparer", "dzf_liste_transformer", { liste: "{{nouveaux}}", modele: '{"uid":"{{item.uid}}","dossier":"{{item.dossier}}","message_id":"{{item.message_id}}","de":"{{item.de}}","de_nom":"{{item.de_nom}}","a":"{{item.a}}","sujet":"{{item.sujet}}","date":"{{item.date}}","extrait":"{{item.extrait}}","corps":"{{item.corps}}","lu":"{{item.lu}}","suivi":"{{item.suivi}}","pieces_jointes":"{{item.pieces_jointes}}","important":false,"statut":"nouveau"}', sortie: "lignes" }),
+      K.st("preparer", "dzf_liste_transformer", { liste: "{{nouveaux}}", modele: '{"uid":"{{item.uid}}","dossier":"{{item.dossier}}","message_id":"{{item.message_id}}","de":"{{item.de}}","de_nom":"{{item.de_nom}}","a":"{{item.a}}","sujet":"{{item.sujet}}","date":"{{item.date}}","extrait":"{{item.extrait}}","corps":"{{item.contenu}}","lu":"{{item.lu}}","suivi":"{{item.suivi}}","pieces_jointes":"{{item.pieces_jointes}}","important":false,"statut":"nouveau"}', sortie: "lignes" }),
       K.st("ranger", "dzf_table_upsert", { table: "mails", liste: "{{lignes}}", cle: "message_id", sortie: "bilan" }),
       K.st("liberer", "dzf_verrou", { action: "libérer", nom: "releve-mails", sortie: "verrou_libre" }),
     ], { reglages: ["valeurs"] }),

@@ -8,15 +8,22 @@
 "use strict";
 const { PLUGIN } = require("./core");
 const admin = require("./admin");
+const { dysizz_hub } = require("./hub");
 
 module.exports = {
   sc_plugin_api_version: 1,
   plugin_name: PLUGIN,
+  /* tuiles sur l'accueil Dysizz (/dysizz) */
+  dysizz_hub,
   routes: [
     { url: "/dysizz-me", method: "get", callback: admin.home },
     { url: "/dysizz-me/m/:key", method: "get", callback: admin.detail },
     { url: "/dysizz-me/install/:key", method: "post", callback: admin.install },
     { url: "/dysizz-me/install-all", method: "post", callback: admin.installAll },
     { url: "/dysizz-me/uninstall/:key", method: "post", callback: admin.uninstall },
+    { url: "/dysizz-me/etat", method: "get", callback: admin.etat },
+    { url: "/dysizz-me/reglages/:key", method: "get", callback: admin.settingsPage },
+    { url: "/dysizz-me/reglages/:key", method: "post", callback: admin.settingsSave },
+    { url: "/dysizz-me/reglages/:key/tester", method: "post", callback: admin.settingsTest },
   ],
 };

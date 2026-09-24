@@ -232,6 +232,9 @@ const installModule = async (mod, allMods, { reset = false } = {}) => {
   await saveCfg({ installed: [...installed], stamps });
   await refreshAllShells(allMods);
   if (mod.key === "accueil" || installed.has("accueil")) await setHome();
+  /* tes réglages (page « Régler ») sont réappliqués aux workflows qui viennent d'être (ré)écrits */
+  const saved = ((await getCfg()).settings || {})[mod.key];
+  if (mod.settings && saved) { try { await require("./settings").applyToWorkflows(mod, saved); } catch (e) { log.push(`réglages non réappliqués : ${e.message}`); } }
   return log;
 };
 

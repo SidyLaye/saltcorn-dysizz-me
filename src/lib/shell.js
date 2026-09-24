@@ -32,7 +32,8 @@ const topHtml = (title, icon, quick) => `
 <div class="dzv-top-actions">
   ${quick ? `<a class="dz-btn dz-btn-primary dz-btn-sm" href="javascript:ajax_modal('${esc(quick.url)}')"><i class="fas fa-plus"></i><span class="dzv-hide-sm">${esc(quick.label)}</span></a>` : ""}
   <button class="dz-btn dz-btn-ghost dz-icon-btn" type="button" data-dz-cmdk-open aria-label="Rechercher"><i class="fas fa-search"></i></button>
-</div>`;
+</div>
+<div class="dzv-setup-hint" hidden></div><script>(function(){var el=document.currentScript.previousElementSibling;fetch("/dysizz-me/etat?page="+encodeURIComponent(location.pathname.split("/").pop()),{credentials:"same-origin"}).then(function(r){return r.ok?r.json():null}).then(function(j){if(!j||!j.hint)return;var t=document.createElement("span");t.textContent=j.hint;el.innerHTML='<i class="fas fa-sliders-h"></i>';el.appendChild(t);var a=document.createElement("a");a.className="dz-btn dz-btn-primary dz-btn-sm";a.href=j.url;a.textContent="Régler maintenant";el.appendChild(a);el.hidden=false}).catch(function(){})})();</script>`;
 
 const bottomHtml = (items, current) => {
   const main = items.filter((i) => i.mobile).slice(0, 4);

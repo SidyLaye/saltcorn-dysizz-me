@@ -598,12 +598,7 @@ S'appuie sur : taches.
 
 ### À régler
 
-- Dans Dokploy (ton service Saltcorn → Environment), ajoute `DZ_MAIL_PASSWORD=le mot de passe de ta boîte`, puis redéploie.
-
-- Saltcorn → Déclencheurs → mails_releve → étape reglages : mets ton adresse dans « utilisateur ». Serveur : `ssl0.ovh.net` (MX Plan) ou `pro1.mail.ovh.net` (E-mail Pro).
-
-- « Test run » du workflow pour une première relève. Ensuite c'est automatique (toutes les ~5 min). Tant que l'adresse est vide, le workflow s'arrête tout de suite sans erreur.
-Rien n'est modifié sur le serveur mail : ni lu, ni déplacé, ni supprimé.
+Tout se règle dans Régler Mails pro : ton adresse, ton offre OVH, ton mot de passe (rangé chiffré), puis « Tester ». Rien n'est modifié sur le serveur mail : ni lu, ni déplacé, ni supprimé.
 
 ### Comment ça marche
 
@@ -724,11 +719,7 @@ Offres d'emploi en France (API France Travail, gratuite) selon tes recherches en
 
 ### À régler
 
-- Crée un compte sur francetravail.io, puis une application avec l'API « Offres d'emploi v2 » (gratuit).
-
-- Dans Dokploy (service Saltcorn → Environment) : `FT_CLIENT_ID=…` et `FT_CLIENT_SECRET=…`, puis redéploie.
-
-- Règle tes recherches (mots-clés, département, alternance…) dans la page Emploi, puis Déclencheurs → emplois_releve → « Test run » (tant que les variables manquent, il s'arrête sans erreur).
+Crée une application gratuite sur francetravail.io (API « Offres d'emploi v2 »), puis colle ses deux clés dans Régler Emploi. Tes recherches se règlent ensuite dans la page Emploi.
 
 ### Comment ça marche
 

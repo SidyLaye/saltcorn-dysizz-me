@@ -1,5 +1,12 @@
 # Journal des versions
 
+## 2.1.0
+
+- **Pages « Régler »** (`/dysizz-me/reglages/<module>`) : Mails pro (adresse, offre OVH, mot de passe rangé chiffré, bouton Tester) et Emploi (clés France Travail). Plus besoin de toucher aux variables du serveur ni aux workflows ; les réglages sont réappliqués après chaque mise à jour.
+- Démarrage en 3 étapes sur `/dysizz-me` (installer, régler, utiliser) et bandeau « à régler » en haut des pages concernées.
+- Lecteur de mail refait : expéditeur, date, actions, et le vrai rendu du mail (HTML isolé, images distantes à la demande).
+- Tuiles de Me sur l'accueil Dysizz (`/dysizz`), avec mails non lus, tâches du jour, pannes.
+
 ## 2.0.0
 
 - La solution s'appelle maintenant **Me** (module `dysizz-me`, page `/dysizz-me`). L'installation existante (modules, réglages) est reprise toute seule.

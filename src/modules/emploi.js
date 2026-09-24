@@ -32,11 +32,22 @@ module.exports = {
   group: "Travail",
   description: "Offres d'emploi en France (API France Travail, gratuite) selon tes recherches enregistrées, tri rapide (intéressante / écarter / postuler) et suivi des candidatures avec relance automatique.",
   depends: [],
-  setup: `<ol>
-<li>Crée un compte sur <a href="https://francetravail.io" target="_blank" rel="noopener">francetravail.io</a>, puis une application avec l'API « Offres d'emploi v2 » (gratuit).</li>
-<li>Dans Dokploy (service Saltcorn → Environment) : <code>FT_CLIENT_ID=…</code> et <code>FT_CLIENT_SECRET=…</code>, puis redéploie.</li>
-<li>Règle tes recherches (mots-clés, département, alternance…) dans la page Emploi, puis Déclencheurs → <b>emplois_releve</b> → « Test run » (tant que les variables manquent, il s'arrête sans erreur).</li>
-</ol>`,
+  setup: "<p>Crée une application gratuite sur <a href=\"https://francetravail.io\" target=\"_blank\" rel=\"noopener\">francetravail.io</a> (API « Offres d'emploi v2 »), puis colle ses deux clés dans <a href=\"/dysizz-me/reglages/emploi\">Régler Emploi</a>. Tes recherches se règlent ensuite dans la page Emploi.</p>",
+  settings: {
+    intro: "Les offres viennent de l'API officielle de France Travail (gratuite). 1) Crée un compte sur <a href=\"https://francetravail.io\" target=\"_blank\" rel=\"noopener\">francetravail.io</a>. 2) « Créer une application », coche l'API <b>Offres d'emploi v2</b>. 3) Copie ici l'identifiant et la clé secrète.",
+    fields: [
+      { name: "client_id", label: "Identifiant client", type: "password", secret: "FT_CLIENT_ID", required: true },
+      { name: "client_secret", label: "Clé secrète", type: "password", secret: "FT_CLIENT_SECRET", required: true },
+    ],
+    apply: [{ trigger: "emplois_releve", step: "configure", set: { condition: "true" } }],
+    test: {
+      action: "dzf_france_travail",
+      config: () => ({ mots_cles: "data", depuis_jours: 7 }),
+      ok: (r) => `Connexion réussie. ${Array.isArray(r) ? r.length : 0} offre(s) « data » cette semaine.`,
+      explain: (m) => (/401|invalid_client|unauthorized/i.test(m) ? "France Travail refuse les clés : recopie-les (et vérifie que l'API Offres d'emploi v2 est cochée)." : ""),
+    },
+    after: "Règle maintenant tes recherches dans la page Emploi.",
+  },
   tables: [
     {
       name: "emploi_recherches", description: "Tes recherches enregistrées",
