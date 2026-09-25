@@ -25,7 +25,7 @@ const card = (extraTop = []) => K.box("`dzv-article${lu ? ' dzv-read' : ''}${fav
 const ETAT_SOURCES = `// Note l'état de chaque source lue (ok / erreur) et garde les identifiants YouTube trouvés.
 const S = Table.findOne({ name: "veille_sources" });
 const erreurs = new Map((row.articles_erreurs || []).map((e) => [String(e.source), e.erreur]));
-for (const c of row.articles_chaines || []) await S.updateRow({ youtube_id: c.youtube_id }, c.source, undefined, true);
+for (const c of row.articles_chaines || []) { if (!c.source) continue; if (c.youtube_id) await S.updateRow({ youtube_id: c.youtube_id }, c.source, undefined, true); else if (c.flux) await S.updateRow({ url: c.flux }, c.source, undefined, true); }
 for (const s of row.sources || []) {
   const err = erreurs.get(String(s.id));
   await S.updateRow({ derniere_synchro: new Date(), etat: err ? "erreur" : "ok", erreur: err ? String(err).slice(0, 300) : "" }, s.id, undefined, true);

@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 2.2.1
+
+- Veille : quand une source est une page web, le flux RSS trouvé automatiquement est enregistré à sa place (plus d'erreur au passage suivant).
+
 ## 2.2.0
 
 - **Surveillance en profondeur** : 13 types de sondes (site, scénario d'API, port, DNS, changement DNS, certificat, domaine, contenu, liste noire, mail, Prometheus, battement de tâche cron, note de sécurité), intervalle par sonde, incidents avec durée, disponibilité 24 h / 7 j / 30 j, page de statut (publique si tu veux), alertes par notification, ntfy et Telegram.

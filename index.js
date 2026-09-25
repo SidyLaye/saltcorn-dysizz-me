@@ -1,4 +1,4 @@
-/* dysizz-me 2.2.0 — FICHIER GÉNÉRÉ par tools/build.mjs depuis src/. Ne pas modifier à la main. */
+/* dysizz-me 2.2.1 — FICHIER GÉNÉRÉ par tools/build.mjs depuis src/. Ne pas modifier à la main. */
 "use strict";
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __commonJS = (cb, mod) => function __require() {
@@ -10,7 +10,7 @@ var require_core = __commonJS({
   "../src/core.js"(exports2, module2) {
     "use strict";
     var PLUGIN2 = "dysizz-me";
-    var VERSION = true ? "2.2.0" : "dev";
+    var VERSION = true ? "2.2.1" : "dev";
     var isAdmin = (req) => !!(req && req.user && req.user.role_id === 1);
     var esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
     var denied = (res) => res.status(403).send("R\xE9serv\xE9 aux administrateurs");
@@ -2094,7 +2094,7 @@ return { eval_js: "var c=document.getElementById('art-" + row.id + "');if(c)c.cl
     var ETAT_SOURCES = `// Note l'\xE9tat de chaque source lue (ok / erreur) et garde les identifiants YouTube trouv\xE9s.
 const S = Table.findOne({ name: "veille_sources" });
 const erreurs = new Map((row.articles_erreurs || []).map((e) => [String(e.source), e.erreur]));
-for (const c of row.articles_chaines || []) await S.updateRow({ youtube_id: c.youtube_id }, c.source, undefined, true);
+for (const c of row.articles_chaines || []) { if (!c.source) continue; if (c.youtube_id) await S.updateRow({ youtube_id: c.youtube_id }, c.source, undefined, true); else if (c.flux) await S.updateRow({ url: c.flux }, c.source, undefined, true); }
 for (const s of row.sources || []) {
   const err = erreurs.get(String(s.id));
   await S.updateRow({ derniere_synchro: new Date(), etat: err ? "erreur" : "ok", erreur: err ? String(err).slice(0, 300) : "" }, s.id, undefined, true);
