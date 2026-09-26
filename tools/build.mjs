@@ -9,7 +9,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const r = (...p) => path.join(root, ...p);
 const pkg = JSON.parse(fs.readFileSync(r("package.json"), "utf8"));
 await build({
-  entryPoints: [r("src", "index.js")], outfile: r("index.js"), bundle: true, platform: "node", target: "node18", format: "cjs",
+  absWorkingDir: root, entryPoints: [r("src", "index.js")], outfile: r("index.js"), bundle: true, platform: "node", target: "node18", format: "cjs",
   external: ["@saltcorn/*"], define: { __DZV_VERSION__: JSON.stringify(pkg.version) },
   banner: { js: `/* dysizz-me ${pkg.version} — FICHIER GÉNÉRÉ par tools/build.mjs depuis src/. Ne pas modifier à la main. */` },
   legalComments: "none", logLevel: "warning",

@@ -5,9 +5,9 @@ var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
 
-// ../src/core.js
+// src/core.js
 var require_core = __commonJS({
-  "../src/core.js"(exports2, module2) {
+  "src/core.js"(exports2, module2) {
     "use strict";
     var PLUGIN2 = "dysizz-me";
     var VERSION = true ? "2.2.1" : "dev";
@@ -46,9 +46,9 @@ var require_core = __commonJS({
   }
 });
 
-// ../src/lib/layout.js
+// src/lib/layout.js
 var require_layout = __commonJS({
-  "../src/lib/layout.js"(exports2, module2) {
+  "src/lib/layout.js"(exports2, module2) {
     "use strict";
     var field = (name, fieldview = "show", o = {}) => ({ type: "field", field_name: name, fieldview, textStyle: o.style || "", block: !!o.block, configuration: o.cfg || {}, ...o.cls ? { class: o.cls } : {} });
     var join = (path, fieldview = "as_text", o = {}) => ({ type: "join_field", join_field: path, fieldview, textStyle: o.style || "", block: !!o.block, configuration: o.cfg || {} });
@@ -193,9 +193,9 @@ var require_layout = __commonJS({
   }
 });
 
-// ../src/lib/shell.js
+// src/lib/shell.js
 var require_shell = __commonJS({
-  "../src/lib/shell.js"(exports2, module2) {
+  "src/lib/shell.js"(exports2, module2) {
     "use strict";
     var { esc } = require_core();
     var { box, O, text } = require_layout();
@@ -298,9 +298,9 @@ ${quick.map((q) => `<a href="javascript:ajax_modal('${esc(q.url)}')" data-keywor
   }
 });
 
-// ../src/settings.js
+// src/settings.js
 var require_settings = __commonJS({
-  "../src/settings.js"(exports2, module2) {
+  "src/settings.js"(exports2, module2) {
     "use strict";
     var { esc } = require_core();
     var flowApi = () => {
@@ -471,9 +471,9 @@ fetch("/dysizz-me/reglages/${esc(mod.key)}/tester",{method:"POST",credentials:"s
   }
 });
 
-// ../src/installer.js
+// src/installer.js
 var require_installer = __commonJS({
-  "../src/installer.js"(exports2, module2) {
+  "src/installer.js"(exports2, module2) {
     "use strict";
     var { hash } = require_core();
     var { shellLayout, refreshShell } = require_shell();
@@ -817,9 +817,9 @@ var require_installer = __commonJS({
   }
 });
 
-// ../src/modules/_kit.js
+// src/modules/_kit.js
 var require_kit = __commonJS({
-  "../src/modules/_kit.js"(exports2, module2) {
+  "src/modules/_kit.js"(exports2, module2) {
     "use strict";
     var L = require_layout();
     var s = (name, label, o = {}) => ({ name, label, type: "String", ...o });
@@ -856,9 +856,9 @@ var require_kit = __commonJS({
   }
 });
 
-// ../src/modules/accueil.js
+// src/modules/accueil.js
 var require_accueil = __commonJS({
-  "../src/modules/accueil.js"(exports2, module2) {
+  "src/modules/accueil.js"(exports2, module2) {
     "use strict";
     var K = require_kit();
     var TILES = JSON.stringify([
@@ -922,9 +922,9 @@ var require_accueil = __commonJS({
   }
 });
 
-// ../src/modules/taches.js
+// src/modules/taches.js
 var require_taches = __commonJS({
-  "../src/modules/taches.js"(exports2, module2) {
+  "src/modules/taches.js"(exports2, module2) {
     "use strict";
     var K = require_kit();
     var DOMAINES = ["Pro", "Maison", "Perso", "Administratif", "Finances", "Sant\xE9", "Apprentissage"];
@@ -1064,9 +1064,9 @@ return d.toISOString();`;
   }
 });
 
-// ../src/modules/objectifs.js
+// src/modules/objectifs.js
 var require_objectifs = __commonJS({
-  "../src/modules/objectifs.js"(exports2, module2) {
+  "src/modules/objectifs.js"(exports2, module2) {
     "use strict";
     var K = require_kit();
     var { DOMAINES } = require_taches();
@@ -1196,9 +1196,9 @@ return { reload_page: true };`;
   }
 });
 
-// ../src/modules/maison.js
+// src/modules/maison.js
 var require_maison = __commonJS({
-  "../src/modules/maison.js"(exports2, module2) {
+  "src/modules/maison.js"(exports2, module2) {
     "use strict";
     var K = require_kit();
     var COCHER = `// Coche / d\xE9coche un article de la liste de courses.
@@ -1258,9 +1258,9 @@ return { reload_page: true };`;
   }
 });
 
-// ../src/modules/budget.js
+// src/modules/budget.js
 var require_budget = __commonJS({
-  "../src/modules/budget.js"(exports2, module2) {
+  "src/modules/budget.js"(exports2, module2) {
     "use strict";
     var K = require_kit();
     var SOLDES = `// Recalcule le solde de chaque compte :
@@ -1433,9 +1433,9 @@ for (const c of await Comptes.getRows({})) {
   }
 });
 
-// ../src/modules/sante.js
+// src/modules/sante.js
 var require_sante = __commonJS({
-  "../src/modules/sante.js"(exports2, module2) {
+  "src/modules/sante.js"(exports2, module2) {
     "use strict";
     var K = require_kit();
     var TILES = JSON.stringify([
@@ -1563,9 +1563,9 @@ var require_sante = __commonJS({
   }
 });
 
-// ../src/modules/documents.js
+// src/modules/documents.js
 var require_documents = __commonJS({
-  "../src/modules/documents.js"(exports2, module2) {
+  "src/modules/documents.js"(exports2, module2) {
     "use strict";
     var K = require_kit();
     var CATS = ["identit\xE9", "sant\xE9", "banque", "imp\xF4ts", "logement", "travail", "\xE9tudes", "v\xE9hicule", "assurance", "factures", "autre"];
@@ -1647,9 +1647,9 @@ var require_documents = __commonJS({
   }
 });
 
-// ../src/modules/mails.js
+// src/modules/mails.js
 var require_mails = __commonJS({
-  "../src/modules/mails.js"(exports2, module2) {
+  "src/modules/mails.js"(exports2, module2) {
     "use strict";
     var K = require_kit();
     var REGLES = `// \xC0 l'arriv\xE9e de chaque mail (rel\xE8ve) : on applique tes r\xE8gles (table mail_regles)
@@ -1849,9 +1849,9 @@ return { notify: "T\xE2che cr\xE9\xE9e", reload_page: true };`;
   }
 });
 
-// ../src/modules/emploi.js
+// src/modules/emploi.js
 var require_emploi = __commonJS({
-  "../src/modules/emploi.js"(exports2, module2) {
+  "src/modules/emploi.js"(exports2, module2) {
     "use strict";
     var K = require_kit();
     var slug = (x) => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "-");
@@ -2066,9 +2066,9 @@ return nouvelles;`;
   }
 });
 
-// ../src/modules/veille.js
+// src/modules/veille.js
 var require_veille = __commonJS({
-  "../src/modules/veille.js"(exports2, module2) {
+  "src/modules/veille.js"(exports2, module2) {
     "use strict";
     var K = require_kit();
     var THEMES = ["dev", "cyber", "ia", "devops", "mlops", "cloud", "r\xE9seau", "syst\xE8mes", "data", "tech fr", "actus france", "actus s\xE9n\xE9gal"];
@@ -2257,9 +2257,9 @@ return { notify: "Relecture lanc\xE9e", reload_page: true };`;
   }
 });
 
-// ../src/modules/videos.js
+// src/modules/videos.js
 var require_videos = __commonJS({
-  "../src/modules/videos.js"(exports2, module2) {
+  "src/modules/videos.js"(exports2, module2) {
     "use strict";
     var K = require_kit();
     var { toggle } = require_veille();
@@ -2345,9 +2345,9 @@ var require_videos = __commonJS({
   }
 });
 
-// ../src/modules/actus.js
+// src/modules/actus.js
 var require_actus = __commonJS({
-  "../src/modules/actus.js"(exports2, module2) {
+  "src/modules/actus.js"(exports2, module2) {
     "use strict";
     var K = require_kit();
     var { IMG_FML } = require_veille();
@@ -2403,9 +2403,9 @@ var require_actus = __commonJS({
   }
 });
 
-// ../src/modules/surveillance.js
+// src/modules/surveillance.js
 var require_surveillance = __commonJS({
-  "../src/modules/surveillance.js"(exports2, module2) {
+  "src/modules/surveillance.js"(exports2, module2) {
     "use strict";
     var K = require_kit();
     var TYPES = ["http", "api", "tcp", "dns", "dns_change", "tls", "domaine", "contenu", "liste_noire", "mail", "prometheus", "battement", "securite"];
@@ -2642,9 +2642,9 @@ return true;`;
   }
 });
 
-// ../src/modules/index.js
+// src/modules/index.js
 var require_modules = __commonJS({
-  "../src/modules/index.js"(exports2, module2) {
+  "src/modules/index.js"(exports2, module2) {
     "use strict";
     module2.exports = [
       require_accueil(),
@@ -2664,9 +2664,9 @@ var require_modules = __commonJS({
   }
 });
 
-// ../src/admin.js
+// src/admin.js
 var require_admin = __commonJS({
-  "../src/admin.js"(exports2, module2) {
+  "src/admin.js"(exports2, module2) {
     "use strict";
     var { esc, isAdmin, denied, VERSION } = require_core();
     var { installModule, uninstallModule, moduleStatus, getCfg } = require_installer();
@@ -2913,9 +2913,9 @@ ${form(req, `/dysizz-me/uninstall/${m.key}?drop=1`, `<input name="confirm" place
   }
 });
 
-// ../src/hub.js
+// src/hub.js
 var require_hub = __commonJS({
-  "../src/hub.js"(exports2, module2) {
+  "src/hub.js"(exports2, module2) {
     "use strict";
     var MODULES = require_modules();
     var COLORS = { accueil: "#0063b1", taches: "#00a300", objectifs: "#603cba", maison: "#8a5a2b", budget: "#1e7145", sante: "#b91d47", documents: "#3a4a5c", mails: "#2d89ef", emploi: "#e3a21a", veille: "#00aba9", videos: "#e51400", actus: "#7e3878", surveillance: "#da532c" };
@@ -2976,7 +2976,7 @@ var require_hub = __commonJS({
   }
 });
 
-// ../src/index.js
+// src/index.js
 var { PLUGIN } = require_core();
 var admin = require_admin();
 var { dysizz_hub } = require_hub();
