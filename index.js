@@ -1,4 +1,4 @@
-/* dysizz-me 2.2.1 — FICHIER GÉNÉRÉ par tools/build.mjs depuis src/. Ne pas modifier à la main. */
+/* dysizz-me 2.2.2 — FICHIER GÉNÉRÉ par tools/build.mjs depuis src/. Ne pas modifier à la main. */
 "use strict";
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __commonJS = (cb, mod) => function __require() {
@@ -10,7 +10,7 @@ var require_core = __commonJS({
   "src/core.js"(exports2, module2) {
     "use strict";
     var PLUGIN2 = "dysizz-me";
-    var VERSION = true ? "2.2.1" : "dev";
+    var VERSION = true ? "2.2.2" : "dev";
     var isAdmin = (req) => !!(req && req.user && req.user.role_id === 1);
     var esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
     var denied = (res) => res.status(403).send("R\xE9serv\xE9 aux administrateurs");
@@ -312,8 +312,8 @@ var require_settings = __commonJS({
       }
     };
     var hasSecret = async (name) => {
-      if (process.env[name]) return "env";
       const api = flowApi();
+      if (api && typeof api.lireEnv === "function" ? api.lireEnv(name) : process.env[name]) return "env";
       try {
         return api && await api.hasSecret(name) ? "coffre" : "";
       } catch (e) {

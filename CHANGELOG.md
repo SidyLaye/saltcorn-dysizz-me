@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 2.2.2
+
+- Réglages : un mot de passe n'est plus annoncé « dans l'environnement » s'il n'est pas réellement lisible par ce tenant (règles de dysizz-flow 2.4.1 : secrets du serveur jamais lisibles, variables partagées seulement hors tenant racine). Dans un tenant, range les mots de passe dans le coffre.
+- Build identique quel que soit le dossier de lancement ; `docs/MODULES.md` à jour (la CI était rouge).
+
 ## 2.2.1
 
 - Veille : quand une source est une page web, le flux RSS trouvé automatiquement est enregistré à sa place (plus d'erreur au passage suivant).
