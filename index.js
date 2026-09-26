@@ -487,6 +487,13 @@ var require_installer = __commonJS({
       db: require("@saltcorn/data/db"),
       state: require("@saltcorn/data/db/state").getState()
     });
+    var enBase = async (table, name) => {
+      try {
+        return !!await require("@saltcorn/data/db").selectMaybeOne(table, { name });
+      } catch (e) {
+        return false;
+      }
+    };
     var CFG_KEY = "dysizz_me";
     var OLD_KEY = "dysizz_vie";
     var getCfg = async () => {
@@ -642,7 +649,8 @@ var require_installer = __commonJS({
         const ex = View.findOne({ name: v.name });
         const cfgV = typeof v.config === "function" ? v.config() : v.config;
         const attrs = { ...v.title ? { popup_title: v.title, page_title: v.title } : {}, ...v.width ? { popup_width: v.width, popup_width_units: "px" } : {} };
-        if (!ex) {
+        if (!ex && await enBase("_sc_views", v.name)) log.push(`vue ${v.name} d\xE9j\xE0 cr\xE9\xE9e par un autre processus : gard\xE9e`);
+        else if (!ex) {
           await View.create({ name: v.name, table_id: tb ? tb.id : null, viewtemplate: v.template, configuration: cfgV, min_role: v.min_role || 1, description: v.description || "", attributes: attrs });
           log.push(`vue ${v.name} cr\xE9\xE9e`);
         } else if (reset || !my["v:" + v.name] || hash(ex.configuration) === my["v:" + v.name]) {
@@ -658,7 +666,8 @@ var require_installer = __commonJS({
         const ex = Trigger.findOne({ name: wf.name });
         const def = { name: wf.name, description: wf.description || "", action: "Workflow", when_trigger: wf.when, table_id: tb ? tb.id : null, configuration: {}, min_role: 1 };
         const want = stepsOf(wf);
-        if (!ex) {
+        if (!ex && await enBase("_sc_triggers", wf.name)) log.push(`workflow ${wf.name} d\xE9j\xE0 cr\xE9\xE9 par un autre processus : gard\xE9`);
+        else if (!ex) {
           const created = await Trigger.create(def);
           const tid = created.id || (Trigger.findOne({ name: wf.name }) || {}).id;
           await writeSteps(created, want, []);
@@ -679,7 +688,8 @@ var require_installer = __commonJS({
       for (const p of mod.pages || []) {
         const ex = Page.findOne({ name: p.name });
         const layout = p.shell === false ? { above: contentOf(p, installed) } : shellLayout(mods, p, contentOf(p, installed));
-        if (!ex) {
+        if (!ex && await enBase("_sc_pages", p.name)) log.push(`page ${p.name} d\xE9j\xE0 cr\xE9\xE9e par un autre processus : gard\xE9e`);
+        else if (!ex) {
           await Page.create({ name: p.name, title: p.title, description: p.description || "", min_role: p.min_role || 1, layout, fixed_states: {}, attributes: { no_menu: p.shell !== false, request_fluid_layout: true } });
           log.push(`page ${p.name} cr\xE9\xE9e`);
         } else if (reset || !my["p:" + p.name] || hash(stripShell(ex.layout)) === my["p:" + p.name]) {

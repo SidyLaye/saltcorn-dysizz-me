@@ -3,6 +3,7 @@
 ## 2.2.2
 
 - Réglages : un mot de passe n'est plus annoncé « dans l'environnement » s'il n'est pas réellement lisible par ce tenant (règles de dysizz-flow 2.4.1 : secrets du serveur jamais lisibles, variables partagées seulement hors tenant racine). Dans un tenant, range les mots de passe dans le coffre.
+- Installation : plus de vues, pages ou workflows en double. Saltcorn accepte deux éléments du même nom et le contrôle « existe déjà ? » lisait un cache parfois en retard (autre processus, double clic) ; l'existence est maintenant vérifiée en base juste avant de créer.
 - Build identique quel que soit le dossier de lancement ; `docs/MODULES.md` à jour (la CI était rouge).
 
 ## 2.2.1
