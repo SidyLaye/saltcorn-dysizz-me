@@ -1,6 +1,6 @@
 {
   "name": "dysizz-me",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "description": "Solution « Me » pour Saltcorn : tâches, objectifs, maison, budget, santé, documents, mails pro, emploi, veille tech, vidéos, actus France & Sénégal. Construite uniquement avec les blocs UI de dysizz-ui et les blocs workflow de dysizz-flow.",
   "main": "index.js",
   "author": "Sidy Laye",

@@ -19,8 +19,9 @@ const flowApi = () => {
   try { const p = require("@saltcorn/data/db/state").getState().plugins["dysizz-flow"]; return p && p.dysizz_flow_api; } catch (e) { return null; }
 };
 const hasSecret = async (name) => {
-  if (process.env[name]) return "env";
   const api = flowApi();
+  /* dysizz-flow ≥ 2.4.1 : seulement si la variable est lisible par ce tenant */
+  if (api && typeof api.lireEnv === "function" ? api.lireEnv(name) : process.env[name]) return "env";
   try { return api && (await api.hasSecret(name)) ? "coffre" : ""; } catch (e) { return ""; }
 };
 

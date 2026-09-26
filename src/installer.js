@@ -25,6 +25,11 @@ const M = () => ({
 /* ---------- état des modules (installés + empreintes) ----------
    Rangé dans la configuration du tenant (clé « dysizz_me »), pas dans
    celle du plugin : une réinstallation ou mise à jour du plugin ne l'efface pas. */
+/* Existe déjà en base ? Saltcorn n'impose pas de nom unique pour les vues, pages et
+   déclencheurs, et findOne lit un cache qui peut être en retard (autre processus, double
+   clic) : sans ce contrôle, une réinstallation pouvait créer des doublons. */
+const enBase = async (table, name) => { try { return !!(await require("@saltcorn/data/db").selectMaybeOne(table, { name })); } catch (e) { return false; } };
+
 const CFG_KEY = "dysizz_me";
 /* lu et écrit directement en base : le cache de configuration de Saltcorn ne garde que ses propres clés */
 /* l'ancienne clé (quand la solution s'appelait dysizz-vie) est reprise une fois, sans rien perdre */
@@ -185,7 +190,8 @@ const installModule = async (mod, allMods, { reset = false } = {}) => {
     const ex = View.findOne({ name: v.name });
     const cfgV = typeof v.config === "function" ? v.config() : v.config;
     const attrs = { ...(v.title ? { popup_title: v.title, page_title: v.title } : {}), ...(v.width ? { popup_width: v.width, popup_width_units: "px" } : {}) };
-    if (!ex) {
+    if (!ex && (await enBase("_sc_views", v.name))) log.push(`vue ${v.name} déjà créée par un autre processus : gardée`);
+    else if (!ex) {
       await View.create({ name: v.name, table_id: tb ? tb.id : null, viewtemplate: v.template, configuration: cfgV, min_role: v.min_role || 1, description: v.description || "", attributes: attrs });
       log.push(`vue ${v.name} créée`);
     } else if (reset || !my["v:" + v.name] || hash(ex.configuration) === my["v:" + v.name]) {
@@ -205,7 +211,8 @@ const installModule = async (mod, allMods, { reset = false } = {}) => {
     const want = stepsOf(wf);
     /* l'empreinte gardée est celle des étapes vraiment écrites (avec tes réglages conservés),
        pour qu'une prochaine mise à jour sache si tu as modifié le workflow depuis */
-    if (!ex) {
+    if (!ex && (await enBase("_sc_triggers", wf.name))) log.push(`workflow ${wf.name} déjà créé par un autre processus : gardé`);
+    else if (!ex) {
       const created = await Trigger.create(def);
       const tid = created.id || (Trigger.findOne({ name: wf.name }) || {}).id;
       await writeSteps(created, want, []);
@@ -229,7 +236,8 @@ const installModule = async (mod, allMods, { reset = false } = {}) => {
     const ex = Page.findOne({ name: p.name });
     /* shell: false = page sans menu de Me (ex. page de statut publique) */
     const layout = p.shell === false ? { above: contentOf(p, installed) } : shellLayout(mods, p, contentOf(p, installed));
-    if (!ex) {
+    if (!ex && (await enBase("_sc_pages", p.name))) log.push(`page ${p.name} déjà créée par un autre processus : gardée`);
+    else if (!ex) {
       await Page.create({ name: p.name, title: p.title, description: p.description || "", min_role: p.min_role || 1, layout, fixed_states: {}, attributes: { no_menu: p.shell !== false, request_fluid_layout: true } });
       log.push(`page ${p.name} créée`);
     } else if (reset || !my["p:" + p.name] || hash(stripShell(ex.layout)) === my["p:" + p.name]) {
